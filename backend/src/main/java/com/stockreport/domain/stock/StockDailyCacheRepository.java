@@ -1,0 +1,30 @@
+package com.stockreport.domain.stock;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface StockDailyCacheRepository extends MongoRepository<StockDailyCache, String> {
+
+    Optional<StockDailyCache> findByTickerAndMarketAndTradeDate(String ticker, Market market, LocalDate date);
+
+    List<StockDailyCache> findByTickerAndMarketOrderByTradeDateDesc(String ticker, Market market, Pageable pageable);
+
+    List<StockDailyCache> findByMarketAndTradeDateOrderByVolumeDesc(Market market, LocalDate date, Pageable pageable);
+
+    List<StockDailyCache> findByTradeDateOrderByVolumeDesc(LocalDate date, Pageable pageable);
+
+    Optional<StockDailyCache> findFirstByMarketOrderByTradeDateDesc(Market market);
+
+    Page<StockDailyCache> findByMarketAndTradeDate(Market market, LocalDate tradeDate, Pageable pageable);
+
+    @Query("{ '$or': [{'ticker': {'$regex': ?0, '$options': 'i'}}, {'name': {'$regex': ?0, '$options': 'i'}}], 'tradeDate': ?1 }")
+    Page<StockDailyCache> searchByTickerOrName(String query, LocalDate date, Pageable pageable);
+}

@@ -1,0 +1,52 @@
+package com.stockreport.api;
+
+import com.stockreport.service.NewsService;
+import com.stockreport.service.data.KrStockDataService;
+import com.stockreport.service.data.UsStockDataService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.CacheManager;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+@RestController
+@RequestMapping("/api/v1/system")
+@RequiredArgsConstructor
+@Slf4j
+public class SystemController {
+
+    private final CacheManager cacheManager;
+    private final KrStockDataService krStockDataService;
+    private final UsStockDataService usStockDataService;
+    private final NewsService newsService;
+
+    @GetMapping("/cache-status")
+    public ResponseEntity<?> getCacheStatus() {
+        Map<String, Object> cacheInfo = new HashMap<>();
+        cacheManager.getCacheNames().forEach(name -> cacheInfo.put(name, Map.of("name", name)));
+        return ResponseEntity.ok(Map.of("data", Map.of("caches", cacheInfo), "meta", Map.of("timestamp", Instant.now())));
+    }
+
+    @PostMapping("/refresh-cache")
+    public ResponseEntity<?> refreshCache(@RequestParam(required = false) String type) {
+        log.info("Manual cache refresh triggered, type: {}", type);
+        new Thread(() -> {
+            try {
+                if (type == null || type.equals("KR")) krStockDataService.fetchAndSaveKrStocks();
+                if (type == null || type.equals("US")) usStockDataService.fetchAndSaveUsStocks();
+                if (type == null || type.equals("NEWS")) { newsService.fetchKrNews(); newsService.fetchUsNews(); }
+                cacheManager.getCacheNames().forEach(name ->
+                        Objects.requireNonNull(cacheManager.getCache(name)).clear());
+                log.info("Cache refresh completed");
+            } catch (Exception e) {
+                log.error("Cache refresh failed: {}", e.getMessage(), e);
+            }
+        }).start();
+        return ResponseEntity.ok(Map.of("data", Map.of("status", "refresh_started"), "meta", Map.of("timestamp", Instant.now())));
+    }
+}
