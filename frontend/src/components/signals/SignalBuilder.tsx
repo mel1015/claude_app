@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { SignalCondition, SignalLeaf, SignalGroup } from "@/lib/types";
 
@@ -100,10 +100,13 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -129,6 +132,25 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
       setError(err instanceof Error ? err.message : "저장 실패");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    try {
+      const formValues = getValues();
+      const payload = {
+        name: formValues.name || "(이름 없음)",
+        marketFilter: formValues.marketFilter || "ALL",
+        conditions: JSON.stringify(conditions),
+      };
+      const res = await api.post<{ data: { analysis: string } }>("/api/v1/signals/analyze", payload);
+      setAnalysisResult(res.data?.analysis ?? "분석 결과 없음");
+    } catch (err: unknown) {
+      setAnalysisResult(err instanceof Error ? err.message : "분석 실패");
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -338,6 +360,31 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
             </button>
           </div>
         </div>
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={onAnalyze}
+          disabled={analyzing}
+          className="flex items-center gap-2 px-4 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50"
+        >
+          {analyzing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 text-yellow-500" />
+          )}
+          {analyzing ? "Gemini 분석 중..." : "Gemini AI 전략 분석"}
+        </button>
+
+        {analysisResult && (
+          <div className="mt-3 p-4 rounded-lg border bg-muted/20 text-sm whitespace-pre-wrap leading-relaxed">
+            <p className="font-semibold text-xs text-muted-foreground mb-2 flex items-center gap-1">
+              <Sparkles className="h-3 w-3 text-yellow-500" /> Gemini 전략 적합도 분석
+            </p>
+            {analysisResult}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

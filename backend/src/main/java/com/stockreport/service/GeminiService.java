@@ -1,0 +1,156 @@
+package com.stockreport.service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import okhttp3.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class GeminiService {
+
+    @Value("${gemini.api-key:}")
+    private String apiKey;
+
+    private final OkHttpClient httpClient = new OkHttpClient();
+    private final ObjectMapper objectMapper;
+
+    private static final String GEMINI_URL =
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    public String analyzeSignalStrategy(String signalName, String marketFilter, String conditionsJson) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return "Gemini API 키가 설정되지 않았습니다. application.yml에 gemini.api-key를 설정해주세요.";
+        }
+
+        String humanReadable = conditionsToHumanReadable(conditionsJson);
+        String prompt = buildPrompt(signalName, marketFilter, humanReadable, conditionsJson);
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "contents", List.of(Map.of(
+                            "parts", List.of(Map.of("text", prompt))
+                    ))
+            );
+
+            String jsonBody = objectMapper.writeValueAsString(requestBody);
+            Request request = new Request.Builder()
+                    .url(GEMINI_URL + "?key=" + apiKey)
+                    .post(RequestBody.create(jsonBody, MediaType.get("application/json")))
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    String errBody = response.body() != null ? response.body().string() : "(no body)";
+                    log.error("Gemini API error {}: {}", response.code(), errBody);
+                    try {
+                        JsonNode errJson = objectMapper.readTree(errBody);
+                        String msg = errJson.path("error").path("message").asText();
+                        return "Gemini API 오류 (HTTP " + response.code() + "): " + (msg.isBlank() ? errBody : msg);
+                    } catch (Exception ignored) {
+                        return "Gemini API 호출 실패: HTTP " + response.code() + " - " + errBody;
+                    }
+                }
+                if (response.body() == null) {
+                    return "Gemini API 호출 실패: 응답 본문 없음";
+                }
+                String responseBody = response.body().string();
+                JsonNode root = objectMapper.readTree(responseBody);
+                return root.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText("분석 결과를 가져올 수 없습니다.");
+            }
+        } catch (Exception e) {
+            log.error("Gemini API error", e);
+            return "Gemini API 오류: " + e.getMessage();
+        }
+    }
+
+    private String buildPrompt(String name, String market, String humanReadable, String conditionsJson) {
+        return """
+                당신은 주식 투자 전략 분석 전문가입니다.
+                아래 주식 시그널 전략을 분석하고 적합도를 평가해주세요.
+
+                ## 시그널 정보
+                - 이름: %s
+                - 마켓: %s
+                - 조건:
+                %s
+                ## 원본 조건 JSON (참고용)
+                %s
+
+                ## 평가 항목
+                다음 항목을 한국어로 분석해주세요:
+
+                1. **전략 논리 타당성** (이 조건들이 투자 이론상 의미 있는지)
+                2. **강점** (이 전략의 장점)
+                3. **위험 요소** (과최적화, 거래량 부족, 시장 편향 등)
+                4. **개선 제안** (추가하면 좋을 조건이나 수정 사항)
+                5. **적합도 점수** (1~10점, 10점이 최고)
+
+                간결하고 실용적으로 분석해주세요.
+                """.formatted(name, marketKorean(market), humanReadable, conditionsJson);
+    }
+
+    private String marketKorean(String market) {
+        if (market == null) return "전체";
+        return switch (market) {
+            case "KR" -> "한국 (KOSPI/KOSDAQ)";
+            case "US" -> "미국 (NYSE/NASDAQ)";
+            default -> "전체";
+        };
+    }
+
+    private String conditionsToHumanReadable(String conditionsJson) {
+        try {
+            JsonNode root = objectMapper.readTree(conditionsJson);
+            return nodeToString(root, 0);
+        } catch (Exception e) {
+            return conditionsJson;
+        }
+    }
+
+    private String nodeToString(JsonNode node, int depth) {
+        String indent = "  ".repeat(depth);
+        if (node.has("conditions")) {
+            String logic = node.path("logic").asText("AND");
+            StringBuilder sb = new StringBuilder();
+            sb.append(indent).append("[").append(logic).append("]\n");
+            for (JsonNode child : node.get("conditions")) {
+                sb.append(nodeToString(child, depth + 1));
+            }
+            return sb.toString();
+        } else {
+            String field = node.path("field").asText();
+            String op = node.path("operator").asText();
+            double value = node.path("value").asDouble();
+            return indent + fieldLabel(field) + " " + op + " " + value + "\n";
+        }
+    }
+
+    private String fieldLabel(String field) {
+        return switch (field) {
+            case "close_price" -> "종가";
+            case "open_price" -> "시가";
+            case "high_price" -> "고가";
+            case "low_price" -> "저가";
+            case "volume" -> "거래량";
+            case "change_rate" -> "등락률(%)";
+            case "ma5" -> "MA5";
+            case "ma20" -> "MA20";
+            case "ma60" -> "MA60";
+            case "rsi14" -> "RSI(14)";
+            case "macd" -> "MACD";
+            case "macd_signal" -> "MACD Signal";
+            case "macd_hist" -> "MACD Hist";
+            default -> field;
+        };
+    }
+}

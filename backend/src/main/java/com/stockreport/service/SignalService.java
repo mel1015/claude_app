@@ -36,6 +36,7 @@ public class SignalService {
     private final SignalEvaluator signalEvaluator;
     private final StockService stockService;
     private final ObjectMapper objectMapper;
+    private final GeminiService geminiService;
 
     public List<SignalDto> getSignals() {
         return signalRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toDto).toList();
@@ -96,6 +97,10 @@ public class SignalService {
             return objectMapper.readValue(signal.getLastResult(),
                     objectMapper.getTypeFactory().constructCollectionType(List.class, StockDto.class));
         } catch (JsonProcessingException e) { return List.of(); }
+    }
+
+    public String analyzeWithGemini(String name, String marketFilter, String conditions) {
+        return geminiService.analyzeSignalStrategy(name, marketFilter, conditions);
     }
 
     public boolean validateConditions(String conditionsJson) {

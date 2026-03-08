@@ -64,4 +64,11 @@ public class SignalController {
         signalService.validateConditions(body.get("conditions"));
         return ResponseEntity.ok(Map.of("data", Map.of("valid", true), "meta", Map.of("timestamp", Instant.now())));
     }
+
+    @PostMapping("/analyze")
+    public ResponseEntity<?> analyzeSignal(@RequestBody Map<String, String> body) {
+        String analysis = signalService.analyzeWithGemini(
+                body.get("name"), body.get("marketFilter"), body.get("conditions"));
+        return ResponseEntity.ok(Map.of("data", Map.of("analysis", analysis), "meta", Map.of("timestamp", Instant.now())));
+    }
 }

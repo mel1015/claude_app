@@ -11,6 +11,7 @@
 | Frontend | Next.js 14 + TypeScript + Tailwind CSS |
 | 데이터 | Naver Finance (한국주식), Yahoo Finance (미국주식), RSS (뉴스) |
 | 지표 | ta4j (RSI, MACD, 이동평균) |
+| AI 분석 | Gemini 2.5 Flash (시그널 전략 검토) |
 
 ## 사전 요구사항
 
@@ -23,16 +24,28 @@
 ### 1. MongoDB 실행 (Docker)
 
 ```bash
-docker run -d \
-  --name mongo-stockreport \
-  -p 27017:27017 \
-  --restart unless-stopped \
-  mongo:7
+# Docker Desktop 실행 (꺼져 있을 경우)
+open -a Docker
+
+# 컨테이너가 없을 때 (최초 1회)
+docker run -d --name mongo-stockreport -p 27017:27017 --restart unless-stopped mongo:7
+
+# 컨테이너가 이미 있을 때
+docker start mongo-stockreport
 ```
 
-> 이미 실행 중인 경우: `docker start mongo-stockreport`
+### 2. 환경변수 설정
 
-### 2. 백엔드 실행
+`backend/.env` 파일을 생성하고 API 키를 입력합니다.
+
+```bash
+# backend/.env
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+Gemini API 키는 [Google AI Studio](https://aistudio.google.com/apikey)에서 무료로 발급받을 수 있습니다.
+
+### 3. 백엔드 실행
 
 ```bash
 cd backend
@@ -43,7 +56,7 @@ cd backend
 
 백엔드가 시작되면 `http://localhost:8080` 에서 실행됩니다.
 
-### 3. 초기 데이터 수집
+### 4. 초기 데이터 수집
 
 백엔드 최초 실행 후 데이터베이스가 비어 있으므로 수동으로 수집을 트리거합니다.
 
@@ -60,7 +73,7 @@ curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=NEWS"
 
 KR 수집은 약 1-2분, US 수집은 약 3-5분 소요됩니다.
 
-### 4. 프론트엔드 실행
+### 5. 프론트엔드 실행
 
 ```bash
 cd frontend
@@ -84,7 +97,7 @@ npm run dev
 | 즐겨찾기 | `/favorites` | 즐겨찾기 종목 관리 |
 | 거래량 TOP10 | `/top-volume` | 한국/미국 거래량 상위 종목 |
 | 시그널 | `/signals` | 커스텀 조건식 시그널 목록 및 실행 |
-| 시그널 빌더 | `/signals/builder` | AND/OR 조건 조합으로 시그널 생성 |
+| 시그널 빌더 | `/signals/builder` | AND/OR 조건 조합으로 시그널 생성, Gemini AI 전략 분석 |
 | 뉴스 | `/news` | 한국/미국 주식 관련 최신 뉴스 |
 
 ## API 엔드포인트
@@ -101,6 +114,7 @@ DELETE /api/v1/favorites/{id}                  # 즐겨찾기 삭제
 GET  /api/v1/signals                           # 시그널 목록
 POST /api/v1/signals                           # 시그널 생성
 POST /api/v1/signals/{id}/run                  # 시그널 즉시 실행
+POST /api/v1/signals/analyze                   # Gemini AI 전략 분석
 GET  /api/v1/news?market=ALL                   # 뉴스 목록
 POST /api/v1/system/refresh-cache?type=KR|US|NEWS  # 수동 데이터 수집
 ```
