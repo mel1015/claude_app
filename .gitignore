@@ -1,4 +1,11 @@
 # ========================
+# Secrets / Environment
+# ========================
+.env
+.env.local
+.env.*.local
+
+# ========================
 # Backend (Spring Boot / Gradle)
 # ========================
 backend/build/
