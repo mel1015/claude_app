@@ -2,6 +2,8 @@ package com.stockreport.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.stockreport.domain.stock.Timeframe;
+import com.stockreport.dto.response.ParseTextResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
@@ -10,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -19,11 +22,107 @@ public class GeminiService {
     @Value("${gemini.api-key:}")
     private String apiKey;
 
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private final OkHttpClient httpClient = new OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .build();
     private final ObjectMapper objectMapper;
 
     private static final String GEMINI_URL =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    public ParseTextResult parseTextToConditions(String text) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return null;
+        }
+
+        String prompt = """
+                당신은 주식 시그널 조건 생성기입니다.
+                사용자의 자연어 설명을 아래 JSON 형식으로 변환하세요.
+
+                ## 지원 필드 (field / compareField)
+                - close_price: 종가
+                - open_price: 시가
+                - high_price: 고가
+                - low_price: 저가
+                - volume: 거래량
+                - change_rate: 등락률(%%)
+                - ma5: 5봉 이동평균
+                - ma10: 10봉 이동평균
+                - ma20: 20봉 이동평균
+                - ma60: 60봉 이동평균
+                - rsi14: RSI(14)
+                - macd: MACD
+                - macd_signal: MACD Signal
+                - macd_hist: MACD Histogram
+
+                ## 지원 연산자 (operator)
+                >, >=, <, <=, ==, !=
+
+                ## timeframe 감지
+                - 월봉/월간/월 기준 언급 시: "timeframe": "MONTHLY"
+                - 주봉/주간/주 기준 언급 시: "timeframe": "WEEKLY"
+                - 일봉/일간/일 기준 또는 언급 없을 시: "timeframe": "DAILY"
+
+                ## JSON 형식 (timeframe 포함)
+                {"version":"1.0","timeframe":"DAILY","logic":"AND","conditions":[{"id":"c1","field":"rsi14","operator":"<","value":30}]}
+
+                필드 간 비교 (compareField):
+                {"version":"1.0","timeframe":"MONTHLY","logic":"AND","conditions":[{"id":"c1","field":"close_price","operator":">","compareField":"ma10"}]}
+
+                ## 변환 규칙
+                - "종가가 MA 위" → field: close_price, compareField: 해당 MA 필드
+                - 숫자 비교는 value, 필드 간 비교는 compareField 사용
+                - value와 compareField 중 반드시 하나만 사용
+                - 조건이 모호해도 반드시 가장 합리적인 조건 하나 이상 생성
+                - JSON만 출력하고 다른 텍스트는 절대 포함하지 말 것
+                - id는 c1, c2, c3... 또는 g1, g2... 형식
+
+                ## 변환할 내용
+                %s
+                """.formatted(text);
+
+        try {
+            Map<String, Object> requestBody = Map.of(
+                    "contents", List.of(Map.of(
+                            "parts", List.of(Map.of("text", prompt))
+                    ))
+            );
+
+            String jsonBody = objectMapper.writeValueAsString(requestBody);
+            Request request = new Request.Builder()
+                    .url(GEMINI_URL + "?key=" + apiKey)
+                    .post(RequestBody.create(jsonBody, MediaType.get("application/json")))
+                    .build();
+
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return null;
+                String responseBody = response.body().string();
+                JsonNode root = objectMapper.readTree(responseBody);
+                String result = root.path("candidates").get(0)
+                        .path("content").path("parts").get(0)
+                        .path("text").asText("");
+                result = result.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+
+                // timeframe 추출 후 conditions에서 제거
+                JsonNode resultNode = objectMapper.readTree(result);
+                String timeframeStr = resultNode.path("timeframe").asText("DAILY");
+                Timeframe timeframe;
+                try { timeframe = Timeframe.valueOf(timeframeStr); }
+                catch (Exception ex) { timeframe = Timeframe.DAILY; }
+
+                // timeframe 필드를 conditions JSON에서 제거
+                if (resultNode.has("timeframe")) {
+                    ((com.fasterxml.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
+                }
+                return new ParseTextResult(objectMapper.writeValueAsString(resultNode), timeframe);
+            }
+        } catch (Exception e) {
+            log.error("Gemini parse error", e);
+            return null;
+        }
+    }
 
     public String analyzeSignalStrategy(String signalName, String marketFilter, String conditionsJson) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -144,6 +243,7 @@ public class GeminiService {
             case "volume" -> "거래량";
             case "change_rate" -> "등락률(%)";
             case "ma5" -> "MA5";
+            case "ma10" -> "MA10";
             case "ma20" -> "MA20";
             case "ma60" -> "MA60";
             case "rsi14" -> "RSI(14)";

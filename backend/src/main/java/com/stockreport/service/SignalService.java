@@ -8,6 +8,8 @@ import com.stockreport.domain.signal.SignalRepository;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;
+import com.stockreport.domain.stock.Timeframe;
+import com.stockreport.dto.response.ParseTextResult;
 import com.stockreport.dto.request.SignalCreateRequest;
 import com.stockreport.dto.request.SignalUpdateRequest;
 import com.stockreport.dto.response.SignalDto;
@@ -52,6 +54,7 @@ public class SignalService {
         validateConditions(request.getConditions());
         Signal signal = Signal.builder()
                 .name(request.getName()).marketFilter(request.getMarketFilter())
+                .timeframe(request.getTimeframe() != null ? request.getTimeframe() : Timeframe.DAILY)
                 .conditions(request.getConditions()).active(request.isActive())
                 .build();
         return toDto(signalRepository.save(signal));
@@ -63,6 +66,7 @@ public class SignalService {
                 .orElseThrow(() -> new StockNotFoundException("시그널을 찾을 수 없습니다: " + id));
         if (request.getName() != null) signal.setName(request.getName());
         if (request.getMarketFilter() != null) signal.setMarketFilter(request.getMarketFilter());
+        if (request.getTimeframe() != null) signal.setTimeframe(request.getTimeframe());
         if (request.getConditions() != null) {
             validateConditions(request.getConditions());
             signal.setConditions(request.getConditions());
@@ -103,6 +107,15 @@ public class SignalService {
         return geminiService.analyzeSignalStrategy(name, marketFilter, conditions);
     }
 
+    public ParseTextResult parseTextToConditions(String text) {
+        ParseTextResult result = geminiService.parseTextToConditions(text);
+        if (result == null || result.conditions() == null || result.conditions().isBlank()) {
+            throw new IllegalArgumentException("조건 생성에 실패했습니다. 다시 시도해주세요.");
+        }
+        validateConditions(result.conditions());
+        return result;
+    }
+
     public boolean validateConditions(String conditionsJson) {
         try {
             validateNode(objectMapper.readTree(conditionsJson));
@@ -122,11 +135,13 @@ public class SignalService {
             else if (mf.equals("US")) markets.addAll(List.of(Market.NYSE, Market.NASDAQ));
 
             List<StockDto> matched = new ArrayList<>();
+            Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
             for (Market market : markets) {
-                LocalDate latestDate = stockDailyCacheRepository.findFirstByMarketOrderByTradeDateDesc(market)
+                LocalDate latestDate = stockDailyCacheRepository
+                        .findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, timeframe)
                         .map(StockDailyCache::getTradeDate).orElse(LocalDate.now());
                 List<StockDailyCache> stocks = stockDailyCacheRepository
-                        .findByMarketAndTradeDateOrderByVolumeDesc(market, latestDate, PageRequest.of(0, Integer.MAX_VALUE));
+                        .findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(market, latestDate, timeframe, PageRequest.of(0, Integer.MAX_VALUE));
                 for (StockDailyCache stock : stocks) {
                     Map<String, Double> stockMap = signalEvaluator.stockToMap(stock);
                     if (signalEvaluator.evaluate(conditions, stockMap)) matched.add(stockService.toDto(stock));
@@ -146,7 +161,7 @@ public class SignalService {
         } else {
             if (!node.has("field")) throw new IllegalArgumentException("리프 노드에 field가 없습니다");
             if (!node.has("operator")) throw new IllegalArgumentException("리프 노드에 operator가 없습니다");
-            if (!node.has("value")) throw new IllegalArgumentException("리프 노드에 value가 없습니다");
+            if (!node.has("value") && !node.has("compareField")) throw new IllegalArgumentException("리프 노드에 value 또는 compareField가 없습니다");
         }
     }
 
@@ -163,6 +178,7 @@ public class SignalService {
 
         return SignalDto.builder()
                 .id(signal.getId()).name(signal.getName()).marketFilter(signal.getMarketFilter())
+                .timeframe(signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY)
                 .conditions(conditionsNode).active(signal.isActive())
                 .lastRunAt(signal.getLastRunAt()).lastResults(lastResults).createdAt(signal.getCreatedAt())
                 .build();

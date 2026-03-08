@@ -30,10 +30,13 @@ export interface FavoriteDto {
   latestStock?: StockDto;
 }
 
+export type Timeframe = "DAILY" | "WEEKLY" | "MONTHLY";
+
 export interface SignalDto {
   id: string;
   name: string;
   marketFilter: string;
+  timeframe: Timeframe;
   conditions: SignalCondition;
   active: boolean;
   lastRunAt?: string;
@@ -51,7 +54,8 @@ export interface SignalLeaf {
   id: string;
   field: string;
   operator: ">" | ">=" | "<" | "<=" | "==" | "!=";
-  value: number;
+  value?: number;
+  compareField?: string;
 }
 
 export interface SignalGroup {

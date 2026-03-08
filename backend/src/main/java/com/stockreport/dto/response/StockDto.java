@@ -25,6 +25,7 @@ public class StockDto {
     private Double marketCap;
     private Double changeRate;
     private Double ma5;
+    private Double ma10;
     private Double ma20;
     private Double ma60;
     private Double rsi14;

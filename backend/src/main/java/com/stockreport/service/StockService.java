@@ -109,7 +109,7 @@ public class StockService {
                 .lowPrice(stock.getLowPrice()).closePrice(stock.getClosePrice())
                 .volume(stock.getVolume()).marketCap(stock.getMarketCap())
                 .changeRate(stock.getChangeRate()).ma5(stock.getMa5())
-                .ma20(stock.getMa20()).ma60(stock.getMa60()).rsi14(stock.getRsi14())
+                .ma10(stock.getMa10()).ma20(stock.getMa20()).ma60(stock.getMa60()).rsi14(stock.getRsi14())
                 .macd(stock.getMacd()).macdSignal(stock.getMacdSignal()).macdHist(stock.getMacdHist())
                 .build();
     }

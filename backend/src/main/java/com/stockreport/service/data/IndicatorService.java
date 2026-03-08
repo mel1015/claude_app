@@ -49,6 +49,10 @@ public class IndicatorService {
                 SMAIndicator ma5 = new SMAIndicator(closePrice, 5);
                 latest.setMa5(ma5.getValue(lastIdx).doubleValue());
             }
+            if (series.getBarCount() >= 10) {
+                SMAIndicator ma10 = new SMAIndicator(closePrice, 10);
+                latest.setMa10(ma10.getValue(lastIdx).doubleValue());
+            }
             if (series.getBarCount() >= 20) {
                 SMAIndicator ma20 = new SMAIndicator(closePrice, 20);
                 latest.setMa20(ma20.getValue(lastIdx).doubleValue());

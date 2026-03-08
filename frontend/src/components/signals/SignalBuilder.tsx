@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { SignalCondition, SignalLeaf, SignalGroup } from "@/lib/types";
+import type { SignalCondition, SignalLeaf, SignalGroup, Timeframe } from "@/lib/types";
 
 const FIELDS = [
   { value: "close_price", label: "종가" },
@@ -16,6 +16,7 @@ const FIELDS = [
   { value: "volume", label: "거래량" },
   { value: "change_rate", label: "등락률(%)" },
   { value: "ma5", label: "MA5" },
+  { value: "ma10", label: "MA10" },
   { value: "ma20", label: "MA20" },
   { value: "ma60", label: "MA60" },
   { value: "rsi14", label: "RSI(14)" },
@@ -36,6 +37,7 @@ const OPERATORS = [
 const schema = z.object({
   name: z.string().min(1, "이름을 입력하세요"),
   marketFilter: z.enum(["ALL", "KR", "US"]),
+  timeframe: z.enum(["DAILY", "WEEKLY", "MONTHLY"]),
   active: z.boolean(),
 });
 
@@ -45,7 +47,7 @@ let idCounter = 0;
 const genId = () => `node_${++idCounter}`;
 
 function createLeaf(): SignalLeaf {
-  return { id: genId(), field: "close_price", operator: ">", value: 0 };
+  return { id: genId(), field: "close_price", operator: ">", value: 0, compareField: undefined };
 }
 
 function createGroup(): SignalGroup {
@@ -89,6 +91,7 @@ interface SignalBuilderProps {
     id: string;
     name: string;
     marketFilter: string;
+    timeframe?: Timeframe;
     active: boolean;
     conditions: SignalCondition;
   };
@@ -102,17 +105,22 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const [parseText, setParseText] = useState("");
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
     getValues,
+    setValue,
     formState: { errors },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initialData?.name || "",
       marketFilter: (initialData?.marketFilter as "ALL" | "KR" | "US") || "ALL",
+      timeframe: (initialData?.timeframe as Timeframe) || "DAILY",
       active: initialData?.active ?? true,
     },
   });
@@ -132,6 +140,23 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
       setError(err instanceof Error ? err.message : "저장 실패");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onParseText = async () => {
+    if (!parseText.trim()) return;
+    setParsing(true);
+    setParseError(null);
+    try {
+      const res = await api.post<{ data: { conditions: string; timeframe: Timeframe } }>("/api/v1/signals/parse-text", { text: parseText });
+      const parsed = JSON.parse(res.data.conditions) as SignalCondition;
+      setConditions(parsed);
+      setValue("timeframe", res.data.timeframe);
+      setParseText("");
+    } catch (err: unknown) {
+      setParseError(err instanceof Error ? err.message : "조건 생성 실패");
+    } finally {
+      setParsing(false);
     }
   };
 
@@ -270,10 +295,26 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
               <option key={op.value} value={op.value}>{op.label}</option>
             ))}
           </select>
-          <LeafValueInput
-            value={leaf.value}
-            onChange={(v) => updateLeaf(path, { value: v })}
-          />
+          <select
+            value={leaf.compareField ?? "__value__"}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__value__") updateLeaf(path, { compareField: undefined, value: leaf.value ?? 0 });
+              else updateLeaf(path, { compareField: v, value: undefined });
+            }}
+            className="text-xs border rounded px-2 py-1 bg-background"
+          >
+            <option value="__value__">숫자 입력</option>
+            {FIELDS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+          {!leaf.compareField && (
+            <LeafValueInput
+              value={leaf.value ?? 0}
+              onChange={(v) => updateLeaf(path, { value: v })}
+            />
+          )}
           <button
             type="button"
             onClick={() => removeNode(path)}
@@ -309,12 +350,47 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
             <option value="US">미국 (NYSE/NASDAQ)</option>
           </select>
         </div>
+        <div>
+          <label className="text-sm font-medium">기준 봉</label>
+          <select
+            {...register("timeframe")}
+            className="mt-1 w-full border rounded-md px-3 py-2 text-sm bg-background"
+          >
+            <option value="DAILY">일봉</option>
+            <option value="WEEKLY">주봉</option>
+            <option value="MONTHLY">월봉</option>
+          </select>
+        </div>
         <div className="flex items-end">
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" {...register("active")} className="rounded" />
             <span className="text-sm font-medium">활성화</span>
           </label>
         </div>
+      </div>
+
+      <div>
+        <label className="text-sm font-medium mb-2 block">자연어로 조건 생성</label>
+        <div className="flex gap-2">
+          <textarea
+            value={parseText}
+            onChange={(e) => setParseText(e.target.value)}
+            placeholder="예: RSI가 30 이하이고 거래량이 100만 이상이면 시그널 발생"
+            rows={2}
+            className="flex-1 border rounded-md px-3 py-2 text-sm bg-background resize-none"
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onParseText(); }}
+          />
+          <button
+            type="button"
+            onClick={onParseText}
+            disabled={parsing || !parseText.trim()}
+            className="px-4 py-2 text-sm border rounded-md hover:bg-accent disabled:opacity-50 flex items-center gap-2 self-start"
+          >
+            {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-blue-500" />}
+            {parsing ? "생성 중..." : "AI 생성"}
+          </button>
+        </div>
+        {parseError && <p className="text-xs text-destructive mt-1">{parseError}</p>}
       </div>
 
       <div>

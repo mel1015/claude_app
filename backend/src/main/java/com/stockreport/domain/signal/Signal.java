@@ -1,5 +1,6 @@
 package com.stockreport.domain.signal;
 
+import com.stockreport.domain.stock.Timeframe;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -21,6 +22,9 @@ public class Signal {
     private String name;
 
     private String marketFilter;
+
+    @Builder.Default
+    private Timeframe timeframe = Timeframe.DAILY;
 
     private String conditions;
 

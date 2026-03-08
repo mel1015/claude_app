@@ -28,8 +28,10 @@ public class SignalEvaluator {
         } else {
             String field = node.path("field").asText();
             String operator = node.path("operator").asText();
-            double cmp = node.path("value").asDouble();
             double val = stock.getOrDefault(field, 0.0);
+            double cmp = node.has("compareField")
+                    ? stock.getOrDefault(node.path("compareField").asText(), 0.0)
+                    : node.path("value").asDouble();
             return switch (operator) {
                 case ">"  -> val > cmp;
                 case ">=" -> val >= cmp;
@@ -51,6 +53,7 @@ public class SignalEvaluator {
         if (stock.getVolume() != null)      map.put("volume",       stock.getVolume().doubleValue());
         if (stock.getChangeRate() != null)  map.put("change_rate",  stock.getChangeRate());
         if (stock.getMa5() != null)         map.put("ma5",          stock.getMa5());
+        if (stock.getMa10() != null)        map.put("ma10",         stock.getMa10());
         if (stock.getMa20() != null)        map.put("ma20",         stock.getMa20());
         if (stock.getMa60() != null)        map.put("ma60",         stock.getMa60());
         if (stock.getRsi14() != null)       map.put("rsi14",        stock.getRsi14());

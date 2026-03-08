@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;
+import com.stockreport.domain.stock.Timeframe;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -36,13 +37,27 @@ public class UsStockDataService {
 
     @Transactional
     public void fetchAndSaveUsStocks() {
-        log.info("Starting US stock data fetch...");
+        fetchAndSaveUsStocksByTimeframe("1d", "3mo", Timeframe.DAILY);
+    }
+
+    @Transactional
+    public void fetchAndSaveUsWeeklyStocks() {
+        fetchAndSaveUsStocksByTimeframe("1wk", "1y", Timeframe.WEEKLY);
+    }
+
+    @Transactional
+    public void fetchAndSaveUsMonthlyStocks() {
+        fetchAndSaveUsStocksByTimeframe("1mo", "5y", Timeframe.MONTHLY);
+    }
+
+    private void fetchAndSaveUsStocksByTimeframe(String interval, String range, Timeframe timeframe) {
+        log.info("Starting US stock data fetch ({})", timeframe);
         List<String> tickers = loadSp500Tickers();
         log.info("Loaded {} S&P500 tickers", tickers.size());
         int success = 0, failed = 0;
         for (String ticker : tickers) {
             try {
-                fetchStockData(ticker);
+                fetchStockData(ticker, interval, range, timeframe);
                 success++;
                 Thread.sleep(100);
             } catch (InterruptedException e) {
@@ -53,11 +68,12 @@ public class UsStockDataService {
                 failed++;
             }
         }
-        log.info("US stock fetch completed. Success: {}, Failed: {}", success, failed);
+        log.info("US stock fetch completed ({}). Success: {}, Failed: {}", timeframe, success, failed);
     }
 
-    private void fetchStockData(String ticker) throws Exception {
-        String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker + "?range=3mo&interval=1d";
+    private void fetchStockData(String ticker, String interval, String range, Timeframe timeframe) throws Exception {
+        String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker
+                + "?range=" + range + "&interval=" + interval;
         Request request = new Request.Builder().url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("Accept", "application/json").build();
@@ -67,11 +83,11 @@ public class UsStockDataService {
                 log.warn("Yahoo Finance request failed for {}: {}", ticker, response.code());
                 return;
             }
-            parseAndSaveYahooData(ticker, response.body().string());
+            parseAndSaveYahooData(ticker, response.body().string(), timeframe);
         }
     }
 
-    private void parseAndSaveYahooData(String ticker, String json) throws Exception {
+    private void parseAndSaveYahooData(String ticker, String json, Timeframe timeframe) throws Exception {
         JsonNode root = objectMapper.readTree(json);
         JsonNode result = root.path("chart").path("result");
         if (!result.isArray() || result.isEmpty()) return;
@@ -100,6 +116,7 @@ public class UsStockDataService {
 
             entries.add(StockDailyCache.builder()
                     .ticker(ticker).market(market).tradeDate(date).name(name)
+                    .timeframe(timeframe)
                     .openPrice(safeDouble(quote.path("open"), i))
                     .highPrice(safeDouble(quote.path("high"), i))
                     .lowPrice(safeDouble(quote.path("low"), i))
@@ -110,7 +127,7 @@ public class UsStockDataService {
         for (int i = 0; i < entries.size(); i++) {
             StockDailyCache stock = entries.get(i);
             Optional<StockDailyCache> existing = stockDailyCacheRepository
-                    .findByTickerAndMarketAndTradeDate(stock.getTicker(), market, stock.getTradeDate());
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(stock.getTicker(), market, stock.getTradeDate(), timeframe);
             if (existing.isPresent()) {
                 copyFields(stock, existing.get());
                 if (i == entries.size() - 1) indicatorService.calculateAndSetIndicators(entries, existing.get());

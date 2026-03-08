@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -39,6 +40,12 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.toMap(FieldError::getField, FieldError::getDefaultMessage, (a, b) -> a));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(Map.of("error", Map.of("code", "VALIDATION_ERROR", "message", "입력값 검증 오류", "fields", errors, "status", 400)));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<?> handleNoResource(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", Map.of("code", "NOT_FOUND", "message", "요청한 경로를 찾을 수 없습니다", "status", 404)));
     }
 
     @ExceptionHandler(Exception.class)

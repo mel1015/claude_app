@@ -33,12 +33,26 @@ public class SystemController {
     }
 
     @PostMapping("/refresh-cache")
-    public ResponseEntity<?> refreshCache(@RequestParam(required = false) String type) {
-        log.info("Manual cache refresh triggered, type: {}", type);
+    public ResponseEntity<?> refreshCache(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String timeframe) {
+        log.info("Manual cache refresh triggered, type: {}, timeframe: {}", type, timeframe);
         new Thread(() -> {
             try {
-                if (type == null || type.equals("KR")) krStockDataService.fetchAndSaveKrStocks();
-                if (type == null || type.equals("US")) usStockDataService.fetchAndSaveUsStocks();
+                boolean doDaily   = timeframe == null || "DAILY".equalsIgnoreCase(timeframe);
+                boolean doWeekly  = timeframe == null || "WEEKLY".equalsIgnoreCase(timeframe);
+                boolean doMonthly = timeframe == null || "MONTHLY".equalsIgnoreCase(timeframe);
+
+                if (type == null || type.equals("KR")) {
+                    if (doDaily)   krStockDataService.fetchAndSaveKrStocks();
+                    if (doWeekly)  krStockDataService.fetchAndSaveKrWeeklyStocks();
+                    if (doMonthly) krStockDataService.fetchAndSaveKrMonthlyStocks();
+                }
+                if (type == null || type.equals("US")) {
+                    if (doDaily)   usStockDataService.fetchAndSaveUsStocks();
+                    if (doWeekly)  usStockDataService.fetchAndSaveUsWeeklyStocks();
+                    if (doMonthly) usStockDataService.fetchAndSaveUsMonthlyStocks();
+                }
                 if (type == null || type.equals("NEWS")) { newsService.fetchKrNews(); newsService.fetchUsNews(); }
                 cacheManager.getCacheNames().forEach(name ->
                         Objects.requireNonNull(cacheManager.getCache(name)).clear());

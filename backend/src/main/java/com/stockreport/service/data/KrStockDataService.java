@@ -3,6 +3,7 @@ package com.stockreport.service.data;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;
+import com.stockreport.domain.stock.Timeframe;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
@@ -28,7 +29,9 @@ public class KrStockDataService {
     private final IndicatorService indicatorService;
 
     private static final int MAX_PAGES = 5;        // 페이지당 50개 → 최대 250개 종목
-    private static final int HISTORY_DAYS = 90;    // 지표 계산을 위한 히스토리 기간
+    private static final int HISTORY_DAYS = 90;    // 일봉 히스토리 기간
+    private static final int HISTORY_WEEKS = 104;  // 주봉 히스토리 기간 (2년)
+    private static final int HISTORY_MONTHS = 60;  // 월봉 히스토리 기간 (5년)
     private static final Charset EUC_KR = Charset.forName("EUC-KR");
 
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
@@ -49,25 +52,38 @@ public class KrStockDataService {
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     public void fetchAndSaveKrStocks() {
-        log.info("Starting KR stock data fetch from Naver Finance...");
+        fetchAndSaveKrStocksByTimeframe(Timeframe.DAILY, "day", HISTORY_DAYS);
+    }
+
+    public void fetchAndSaveKrWeeklyStocks() {
+        fetchAndSaveKrStocksByTimeframe(Timeframe.WEEKLY, "week", HISTORY_WEEKS);
+    }
+
+    public void fetchAndSaveKrMonthlyStocks() {
+        fetchAndSaveKrStocksByTimeframe(Timeframe.MONTHLY, "month", HISTORY_MONTHS);
+    }
+
+    private void fetchAndSaveKrStocksByTimeframe(Timeframe timeframe, String navTimeframe, int count) {
+        log.info("Starting KR stock data fetch from Naver Finance ({})", timeframe);
         LocalDate today = LocalDate.now();
         try {
-            fetchMarket(Market.KOSPI, "0", today);
-            fetchMarket(Market.KOSDAQ, "1", today);
-            log.info("KR stock data fetch completed for {}", today);
+            fetchMarket(Market.KOSPI, "0", today, timeframe, navTimeframe, count);
+            fetchMarket(Market.KOSDAQ, "1", today, timeframe, navTimeframe, count);
+            log.info("KR stock data fetch completed ({})", timeframe);
         } catch (Exception e) {
-            log.error("Failed to fetch KR stock data: {}", e.getMessage(), e);
+            log.error("Failed to fetch KR stock data ({}): {}", timeframe, e.getMessage(), e);
         }
     }
 
-    private void fetchMarket(Market market, String sosok, LocalDate today) throws Exception {
+    private void fetchMarket(Market market, String sosok, LocalDate today,
+                             Timeframe timeframe, String navTimeframe, int count) throws Exception {
         List<StockInfo> stocks = fetchStockList(sosok, today);
         log.info("Fetched {} {} stocks from Naver Finance market summary", stocks.size(), market);
 
         int saved = 0;
         for (StockInfo info : stocks) {
             try {
-                processStock(info, market, today);
+                processStock(info, market, today, timeframe, navTimeframe, count);
                 saved++;
                 Thread.sleep(80); // rate limiting
             } catch (InterruptedException e) {
@@ -80,45 +96,39 @@ public class KrStockDataService {
         log.info("Saved {}/{} {} stocks", saved, stocks.size(), market);
     }
 
-    private void processStock(StockInfo info, Market market, LocalDate today) throws Exception {
-        // 1. sise.nhn으로 90일 OHLCV 히스토리 가져오기
-        List<OhlcvRow> history = fetchOhlcvHistory(info.code);
+    private void processStock(StockInfo info, Market market, LocalDate today,
+                              Timeframe timeframe, String navTimeframe, int count) throws Exception {
+        List<OhlcvRow> history = fetchOhlcvHistory(info.code, navTimeframe, count);
         if (history.isEmpty()) return;
 
-        // 2. 히스토리 각 날짜 저장 (이미 있는 날짜는 스킵)
         for (OhlcvRow row : history) {
             boolean exists = stockDailyCacheRepository
-                    .findByTickerAndMarketAndTradeDate(info.code, market, row.date)
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(info.code, market, row.date, timeframe)
                     .isPresent();
             if (exists) continue;
 
-            // 당일 데이터면 시세 페이지에서 가져온 changeRate, marketCap 적용
             double changeRate = row.date.equals(today) ? info.changeRate : calcChangeRate(row, history);
 
             StockDailyCache cache = StockDailyCache.builder()
                     .ticker(info.code).market(market).name(info.name)
-                    .tradeDate(row.date)
+                    .tradeDate(row.date).timeframe(timeframe)
                     .openPrice(row.open).highPrice(row.high)
                     .lowPrice(row.low).closePrice(row.close)
-                    .volume(row.volume)
-                    .changeRate(changeRate)
-                    .marketCap(row.date.equals(today) ? info.marketCap : null)
+                    .volume(row.volume).changeRate(changeRate)
+                    .marketCap(row.date.equals(today) && timeframe == Timeframe.DAILY ? info.marketCap : null)
                     .build();
             stockDailyCacheRepository.save(cache);
         }
 
-        // 3. 최신 레코드에 기술지표 계산 적용
         LocalDate latestDate = history.stream()
-                .map(r -> r.date)
-                .max(LocalDate::compareTo)
-                .orElse(today);
+                .map(r -> r.date).max(LocalDate::compareTo).orElse(today);
 
         stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDate(info.code, market, latestDate)
+                .findByTickerAndMarketAndTradeDateAndTimeframe(info.code, market, latestDate, timeframe)
                 .ifPresent(latest -> {
                     List<StockDailyCache> hist = stockDailyCacheRepository
-                            .findByTickerAndMarketOrderByTradeDateDesc(info.code, market,
-                                    PageRequest.of(0, 90));
+                            .findByTickerAndMarketAndTimeframeOrderByTradeDateDesc(info.code, market, timeframe,
+                                    PageRequest.of(0, count));
                     indicatorService.calculateAndSetIndicators(hist, latest);
                     stockDailyCacheRepository.save(latest);
                 });
@@ -173,9 +183,9 @@ public class KrStockDataService {
      * Naver fchart sise.nhn에서 90일 OHLCV XML 파싱
      * 형식: <item data="yyyyMMdd|open|high|low|close|volume" />
      */
-    private List<OhlcvRow> fetchOhlcvHistory(String code) throws Exception {
+    private List<OhlcvRow> fetchOhlcvHistory(String code, String navTimeframe, int count) throws Exception {
         String url = "https://fchart.stock.naver.com/sise.nhn?symbol=" + code
-                + "&timeframe=day&count=" + HISTORY_DAYS + "&requestType=0";
+                + "&timeframe=" + navTimeframe + "&count=" + count + "&requestType=0";
         String xml = fetchAsEucKr(url);
 
         List<OhlcvRow> rows = new ArrayList<>();

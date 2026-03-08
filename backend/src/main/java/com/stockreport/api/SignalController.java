@@ -2,6 +2,7 @@ package com.stockreport.api;
 
 import com.stockreport.dto.request.SignalCreateRequest;
 import com.stockreport.dto.request.SignalUpdateRequest;
+import com.stockreport.dto.response.ParseTextResult;
 import com.stockreport.dto.response.StockDto;
 import com.stockreport.service.SignalService;
 import jakarta.validation.Valid;
@@ -63,6 +64,13 @@ public class SignalController {
     public ResponseEntity<?> validateConditions(@RequestBody Map<String, String> body) {
         signalService.validateConditions(body.get("conditions"));
         return ResponseEntity.ok(Map.of("data", Map.of("valid", true), "meta", Map.of("timestamp", Instant.now())));
+    }
+
+    @PostMapping("/parse-text")
+    public ResponseEntity<?> parseTextToConditions(@RequestBody Map<String, String> body) {
+        ParseTextResult result = signalService.parseTextToConditions(body.get("text"));
+        return ResponseEntity.ok(Map.of("data", Map.of("conditions", result.conditions(), "timeframe", result.timeframe()),
+                "meta", Map.of("timestamp", Instant.now())));
     }
 
     @PostMapping("/analyze")

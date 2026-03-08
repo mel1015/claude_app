@@ -10,9 +10,9 @@ import java.time.LocalDate;
 
 @Document(collection = "stock_daily_cache")
 @CompoundIndexes({
-        @CompoundIndex(def = "{'ticker': 1, 'market': 1, 'tradeDate': 1}", unique = true),
-        @CompoundIndex(def = "{'ticker': 1, 'market': 1}"),
-        @CompoundIndex(def = "{'market': 1, 'tradeDate': 1}")
+        @CompoundIndex(def = "{'ticker': 1, 'market': 1, 'tradeDate': 1, 'timeframe': 1}", unique = true),
+        @CompoundIndex(def = "{'ticker': 1, 'market': 1, 'timeframe': 1}"),
+        @CompoundIndex(def = "{'market': 1, 'tradeDate': 1, 'timeframe': 1}")
 })
 @Getter
 @Setter
@@ -28,6 +28,9 @@ public class StockDailyCache {
 
     private Market market;
 
+    @Builder.Default
+    private Timeframe timeframe = Timeframe.DAILY;
+
     private LocalDate tradeDate;
     private String name;
 
@@ -41,6 +44,7 @@ public class StockDailyCache {
     private Double changeRate;
 
     private Double ma5;
+    private Double ma10;
     private Double ma20;
     private Double ma60;
     private Double rsi14;
