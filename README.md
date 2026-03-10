@@ -204,3 +204,118 @@ db.stock_daily_cache.countDocuments({timeframe: "MONTHLY"})
 docker stop mongo-stockreport
 docker start mongo-stockreport
 ```
+
+## Claude Code 주요 슬래시 명령어
+
+### 컨텍스트 & 메모리 관리
+
+| 명령어 | 기능 |
+|--------|------|
+| `/context` | 컨텍스트 사용량 시각화 (토큰 비중 확인) |
+| `/compact [지침]` | 대화 히스토리 압축 → 컨텍스트 확보 |
+| `/clear` | 대화 히스토리 완전 초기화 (새 작업 시작 시) |
+| `/memory` | MEMORY.md 편집, 자동 메모리 관리 |
+
+### 세션 관리
+
+| 명령어 | 기능 |
+|--------|------|
+| `/resume [세션명]` | 이전 세션 재개 |
+| `/rename [이름]` | 현재 세션에 이름 지정 |
+| `/export [파일명]` | 대화를 마크다운으로 저장 |
+| `/fork` | 현재 지점에서 새 대화 분기 (실험적 변경 시) |
+
+### 코드 품질 & 검토
+
+| 명령어 | 기능 |
+|--------|------|
+| `/review [PR번호]` | PR 자동 검토 (보안, 품질, 테스트) |
+| `/simplify` | 최근 변경 코드 품질 자동 개선 |
+
+### 모델 & 설정
+
+| 명령어 | 기능 |
+|--------|------|
+| `/model` | AI 모델 전환 |
+| `/cost` | 현재 세션 토큰 비용 확인 |
+| `/config` | 전체 설정 (권한, 모델 등) |
+| `/doctor` | 설치 상태 진단 |
+
+### 실전 활용 패턴
+
+```
+# 컨텍스트 관리
+작업 시작 전 → /context 확인
+30% 초과 시  → /compact
+새 작업 시   → /clear
+
+# 개발 워크플로우
+코드 변경 → /simplify → /review → commit
+
+# 문제 발생 시
+/rewind → 이전 지점 복구
+/fork   → 다른 방법 실험
+```
+
+## Git 브랜치 전략
+
+### 브랜치 구조
+
+```
+main          ← 항상 배포 가능한 안정 브랜치 (production)
+develop       ← 통합 개발 브랜치 (staging)
+│
+├── feat/...  ← 기능 개발
+├── fix/...   ← 버그 수정
+├── chore/... ← 설정·의존성·CI 등 비기능 변경
+└── hotfix/.. ← main에서 직접 분기하는 긴급 수정
+```
+
+### 브랜치 명명 규칙
+
+| 유형 | 패턴 | 예시 |
+|------|------|------|
+| 기능 | `feat/<영역>/<내용>` | `feat/signal/ai-analyze` |
+| 버그 | `fix/<영역>/<내용>` | `fix/stock/pagination-reset` |
+| 설정 | `chore/<내용>` | `chore/update-dependencies` |
+| 긴급 | `hotfix/<내용>` | `hotfix/api-key-leak` |
+
+**영역 구분**: `stock` / `signal` / `news` / `dashboard` / `favorites` / `infra`
+
+### 워크플로우
+
+```bash
+# 1. 항상 develop에서 분기
+git checkout develop
+git pull origin develop
+git checkout -b feat/signal/new-condition
+
+# 2. 작업 → 커밋
+git add <files>
+git commit -m "feat(signal): AND/OR 중첩 조건 UI 추가"
+
+# 3. develop으로 PR → squash merge
+git push origin feat/signal/new-condition
+
+# 4. 릴리즈 준비가 되면 develop → main merge
+git checkout main
+git merge develop --no-ff -m "release: v1.1.0"
+git tag v1.1.0
+```
+
+### 커밋 메시지 규칙
+
+```
+<type>(<scope>): <내용>
+
+type : feat | fix | chore | docs | refactor | test | hotfix
+scope: signal | stock | news | dashboard | backend | frontend | infra
+```
+
+### 브랜치 보호 규칙 (GitHub 권장 설정)
+
+| 브랜치 | 직접 push | PR 필요 |
+|--------|-----------|---------|
+| `main` | 금지 | 필수 |
+| `develop` | 허용 | 권장 |
+| `feat/*` | 자유 | - |
