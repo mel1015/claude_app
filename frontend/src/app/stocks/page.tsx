@@ -18,6 +18,12 @@ const TABS = [
 
 const PAGE_SIZE = 20;
 
+type PaginationButton = {
+  label: string;
+  onClick: () => void;
+  disabled: boolean;
+};
+
 export default function StocksPage() {
   const [market, setMarket] = useState("ALL");
   const [query, setQuery] = useState("");
@@ -46,12 +52,24 @@ export default function StocksPage() {
   const totalPages = meta?.totalPages ?? 0;
   const totalElements = meta?.totalElements ?? 0;
 
+  // 첫 로딩(데이터 없음)과 재조회(이전 데이터 유지) 구분
+  const isInitialLoading = isLoading && stocks === undefined;
+
+  const paginationButtons: PaginationButton[] = [
+    { label: "처음", onClick: () => setPage(0), disabled: page === 0 },
+    { label: "이전", onClick: () => setPage((p) => Math.max(0, p - 1)), disabled: page === 0 },
+    { label: "다음", onClick: () => setPage((p) => Math.min(totalPages - 1, p + 1)), disabled: page >= totalPages - 1 },
+    { label: "마지막", onClick: () => setPage(totalPages - 1), disabled: page >= totalPages - 1 },
+  ];
+
   return (
     <div className="container mx-auto px-4 py-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">주식 검색</h1>
-        {totalElements > 0 && (
-          <span className="text-sm text-muted-foreground">총 {totalElements.toLocaleString()}개 종목</span>
+        {!isInitialLoading && (
+          <span className="text-sm text-muted-foreground">
+            총 {totalElements.toLocaleString()}개 종목
+          </span>
         )}
       </div>
 
@@ -73,7 +91,7 @@ export default function StocksPage() {
         >
           검색
         </button>
-        {query && (
+        {(query || inputValue) && (
           <button
             type="button"
             onClick={handleClear}
@@ -103,14 +121,14 @@ export default function StocksPage() {
       </div>
 
       {/* 결과 */}
-      {isLoading ? (
+      {isInitialLoading ? (
         <div className="flex justify-center py-20">
           <LoadingSpinner />
         </div>
       ) : error ? (
         <ErrorMessage message="데이터를 불러오지 못했습니다." />
       ) : (
-        <>
+        <div className={cn("space-y-4", isLoading && "opacity-50 pointer-events-none")}>
           <div className="border rounded-lg overflow-hidden">
             <StockTable stocks={stocks ?? []} onFavoriteToggle={mutate} />
           </div>
@@ -118,40 +136,32 @@ export default function StocksPage() {
           {/* 페이지네이션 */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage(0)}
-                disabled={page === 0}
-                className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
-              >
-                처음
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
-              >
-                이전
-              </button>
+              {paginationButtons.slice(0, 2).map((btn) => (
+                <button
+                  key={btn.label}
+                  onClick={btn.onClick}
+                  disabled={btn.disabled}
+                  className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
+                >
+                  {btn.label}
+                </button>
+              ))}
               <span className="text-sm text-muted-foreground px-2">
                 {page + 1} / {totalPages}
               </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
-              >
-                다음
-              </button>
-              <button
-                onClick={() => setPage(totalPages - 1)}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
-              >
-                마지막
-              </button>
+              {paginationButtons.slice(2).map((btn) => (
+                <button
+                  key={btn.label}
+                  onClick={btn.onClick}
+                  disabled={btn.disabled}
+                  className="px-3 py-1 text-sm border rounded hover:bg-accent disabled:opacity-40"
+                >
+                  {btn.label}
+                </button>
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
