@@ -52,14 +52,32 @@ public class UsStockDataService {
 
     private void fetchAndSaveUsStocksByTimeframe(String interval, String range, Timeframe timeframe) {
         log.info("Starting US stock data fetch ({})", timeframe);
+
+        // 오늘(ET) 데이터가 이미 수집되어 있으면 전체 skip
+        if (timeframe == Timeframe.DAILY) {
+            LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
+            LocalDate latestNyse = stockDailyCacheRepository
+                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NYSE, timeframe)
+                    .map(StockDailyCache::getTradeDate).orElse(null);
+            LocalDate latestNasdaq = stockDailyCacheRepository
+                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NASDAQ, timeframe)
+                    .map(StockDailyCache::getTradeDate).orElse(null);
+            if (today.equals(latestNyse) && today.equals(latestNasdaq)) {
+                log.info("[US][{}] 오늘 데이터 이미 수집됨, skip", timeframe);
+                return;
+            }
+        }
+
         List<String> tickers = loadSp500Tickers();
         log.info("Loaded {} S&P500 tickers", tickers.size());
         int success = 0, failed = 0;
         for (String ticker : tickers) {
             try {
-                fetchStockData(ticker, interval, range, timeframe);
-                success++;
-                Thread.sleep(100);
+                boolean fetched = fetchStockData(ticker, interval, range, timeframe);
+                if (fetched) {
+                    success++;
+                    Thread.sleep(100); // rate limiting (API 호출이 있을 때만)
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -71,7 +89,25 @@ public class UsStockDataService {
         log.info("US stock fetch completed ({}). Success: {}, Failed: {}", timeframe, success, failed);
     }
 
-    private void fetchStockData(String ticker, String interval, String range, Timeframe timeframe) throws Exception {
+    /** @return API 호출이 실제로 발생했으면 true */
+    private boolean fetchStockData(String ticker, String interval, String range, Timeframe timeframe) throws Exception {
+        // 오늘 데이터 이미 있으면 API 호출 없이 skip
+        if (timeframe == Timeframe.DAILY) {
+            LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
+            boolean alreadyHas = stockDailyCacheRepository
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NYSE, today, timeframe).isPresent()
+                    || stockDailyCacheRepository
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NASDAQ, today, timeframe).isPresent();
+            if (alreadyHas) return false;
+
+            // 히스토리 있으면 range를 최소로 줄임 (처음 수집이면 full range 유지)
+            boolean hasHistory = stockDailyCacheRepository
+                    .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker, Market.NYSE, timeframe).isPresent()
+                    || stockDailyCacheRepository
+                    .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker, Market.NASDAQ, timeframe).isPresent();
+            if (hasHistory) range = "5d";
+        }
+
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker
                 + "?range=" + range + "&interval=" + interval;
         Request request = new Request.Builder().url(url)
@@ -81,10 +117,11 @@ public class UsStockDataService {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 log.warn("Yahoo Finance request failed for {}: {}", ticker, response.code());
-                return;
+                return false;
             }
             parseAndSaveYahooData(ticker, response.body().string(), timeframe);
         }
+        return true;
     }
 
     private void parseAndSaveYahooData(String ticker, String json, Timeframe timeframe) throws Exception {

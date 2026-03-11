@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { Navbar } from "@/components/ui/Navbar";
+import { CollectionStatusBanner } from "@/components/ui/CollectionStatusBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,6 +23,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <div className="min-h-screen bg-background">
             <Navbar />
+            <CollectionStatusBanner />
             <main className="container mx-auto px-4 py-6">{children}</main>
           </div>
         </ThemeProvider>

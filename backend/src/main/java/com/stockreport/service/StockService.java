@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -40,9 +42,8 @@ public class StockService {
 
     public StockDto getStock(String market, String ticker) {
         Market marketEnum = Market.valueOf(market.toUpperCase());
-        LocalDate latestDate = getLatestDate(marketEnum);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker.toUpperCase(), marketEnum, latestDate, Timeframe.DAILY)
+                .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
@@ -78,13 +79,19 @@ public class StockService {
         result.sort((a, b) -> Long.compare(
                 b.getVolume() != null ? b.getVolume() : 0L,
                 a.getVolume() != null ? a.getVolume() : 0L));
-        return result.size() > 10 ? result.subList(0, 10) : result;
+
+        // ticker 중복 제거 (같은 종목이 KOSPI/KOSDAQ 양쪽에 있는 경우 volume이 큰 것 유지)
+        Map<String, StockDto> deduped = new LinkedHashMap<>();
+        for (StockDto s : result) {
+            deduped.putIfAbsent(s.getTicker(), s);
+        }
+        List<StockDto> dedupeList = new ArrayList<>(deduped.values());
+        return dedupeList.size() > 10 ? dedupeList.subList(0, 10) : dedupeList;
     }
 
     public StockDto getLatestStock(String ticker, Market market) {
-        LocalDate latestDate = getLatestDate(market);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, market, latestDate, Timeframe.DAILY)
+                .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker, market, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }

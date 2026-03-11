@@ -24,13 +24,23 @@ export function PriceChart({ data, market }: PriceChartProps) {
     return <div className="text-center py-12 text-muted-foreground">차트 데이터가 없습니다</div>;
   }
 
-  const chartData = [...data].reverse().map((d) => ({
+  const calcMA = (prices: (number | null | undefined)[], period: number, idx: number) => {
+    if (idx < period - 1) return null;
+    const slice = prices.slice(idx - period + 1, idx + 1);
+    if (slice.some((v) => v == null)) return null;
+    return slice.reduce((sum, v) => sum! + v!, 0)! / period;
+  };
+
+  const sorted = [...data].reverse();
+  const closes = sorted.map((d) => d.closePrice);
+
+  const chartData = sorted.map((d, i) => ({
     date: d.tradeDate,
     close: d.closePrice,
     volume: d.volume,
-    ma5: d.ma5,
-    ma20: d.ma20,
-    ma60: d.ma60,
+    ma5: d.ma5 ?? calcMA(closes, 5, i),
+    ma20: d.ma20 ?? calcMA(closes, 20, i),
+    ma60: d.ma60 ?? calcMA(closes, 60, i),
   }));
 
   return (
