@@ -204,3 +204,5 @@ db.stock_daily_cache.countDocuments({timeframe: "MONTHLY"})
 docker stop mongo-stockreport
 docker start mongo-stockreport
 ```
+
+> 기여 방법 및 브랜치 전략은 [CONTRIBUTING.md](./CONTRIBUTING.md)를 참고하세요.
