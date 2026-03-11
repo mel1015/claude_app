@@ -27,12 +27,21 @@ public interface StockDailyCacheRepository extends MongoRepository<StockDailyCac
 
     List<StockDailyCache> findByTradeDateOrderByVolumeDesc(LocalDate date, Pageable pageable);
 
+    List<StockDailyCache> findByTradeDateAndTimeframeOrderByVolumeDesc(LocalDate date, Timeframe timeframe, Pageable pageable);
+
     Optional<StockDailyCache> findFirstByMarketOrderByTradeDateDesc(Market market);
 
     Optional<StockDailyCache> findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market market, Timeframe timeframe);
 
     Page<StockDailyCache> findByMarketAndTradeDate(Market market, LocalDate tradeDate, Pageable pageable);
 
+    Page<StockDailyCache> findByMarketAndTradeDateAndTimeframe(Market market, LocalDate tradeDate, Timeframe timeframe, Pageable pageable);
+
+    Page<StockDailyCache> findByTimeframe(Timeframe timeframe, Pageable pageable);
+
     @Query("{ '$or': [{'ticker': {'$regex': ?0, '$options': 'i'}}, {'name': {'$regex': ?0, '$options': 'i'}}], 'tradeDate': ?1 }")
     Page<StockDailyCache> searchByTickerOrName(String query, LocalDate date, Pageable pageable);
+
+    @Query("{ '$or': [{'ticker': {'$regex': ?0, '$options': 'i'}}, {'name': {'$regex': ?0, '$options': 'i'}}], 'tradeDate': ?1, 'timeframe': ?2 }")
+    Page<StockDailyCache> searchByTickerOrNameAndTimeframe(String query, LocalDate date, Timeframe timeframe, Pageable pageable);
 }
