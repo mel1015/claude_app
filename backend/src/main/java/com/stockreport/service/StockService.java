@@ -42,9 +42,8 @@ public class StockService {
 
     public StockDto getStock(String market, String ticker) {
         Market marketEnum = Market.valueOf(market.toUpperCase());
-        LocalDate latestDate = getLatestDate(marketEnum);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker.toUpperCase(), marketEnum, latestDate, Timeframe.DAILY)
+                .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
@@ -91,9 +90,8 @@ public class StockService {
     }
 
     public StockDto getLatestStock(String ticker, Market market) {
-        LocalDate latestDate = getLatestDate(market);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, market, latestDate, Timeframe.DAILY)
+                .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker, market, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
