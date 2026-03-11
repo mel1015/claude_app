@@ -3,6 +3,7 @@ package com.stockreport.service;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;
+import com.stockreport.domain.stock.Timeframe;
 import com.stockreport.dto.response.StockDto;
 import com.stockreport.exception.StockNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -27,21 +28,21 @@ public class StockService {
     public Page<StockDto> getStocks(String market, String query, Pageable pageable) {
         if (query != null && !query.isEmpty()) {
             LocalDate latestDate = getLatestDate(null);
-            return stockDailyCacheRepository.searchByTickerOrName(query, latestDate, pageable).map(this::toDto);
+            return stockDailyCacheRepository.searchByTickerOrNameAndTimeframe(query, latestDate, Timeframe.DAILY, pageable).map(this::toDto);
         }
         if (market == null || market.equals("ALL")) {
-            return stockDailyCacheRepository.findAll(pageable).map(this::toDto);
+            return stockDailyCacheRepository.findByTimeframe(Timeframe.DAILY, pageable).map(this::toDto);
         }
         Market marketEnum = Market.valueOf(market.toUpperCase());
         LocalDate latestDate = getLatestDate(marketEnum);
-        return stockDailyCacheRepository.findByMarketAndTradeDate(marketEnum, latestDate, pageable).map(this::toDto);
+        return stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframe(marketEnum, latestDate, Timeframe.DAILY, pageable).map(this::toDto);
     }
 
     public StockDto getStock(String market, String ticker) {
         Market marketEnum = Market.valueOf(market.toUpperCase());
         LocalDate latestDate = getLatestDate(marketEnum);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDate(ticker.toUpperCase(), marketEnum, latestDate)
+                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker.toUpperCase(), marketEnum, latestDate, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
@@ -50,7 +51,7 @@ public class StockService {
         Market marketEnum = Market.valueOf(market.toUpperCase());
         Pageable pageable = PageRequest.of(0, days, Sort.by("tradeDate").descending());
         return stockDailyCacheRepository
-                .findByTickerAndMarketOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, pageable)
+                .findByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, Timeframe.DAILY, pageable)
                 .stream().map(this::toDto).toList();
     }
 
@@ -59,7 +60,7 @@ public class StockService {
 
         if (market == null || market.equals("ALL")) {
             LocalDate latestDate = getLatestDate(null);
-            return stockDailyCacheRepository.findByTradeDateOrderByVolumeDesc(latestDate, top10)
+            return stockDailyCacheRepository.findByTradeDateAndTimeframeOrderByVolumeDesc(latestDate, Timeframe.DAILY, top10)
                     .stream().map(this::toDto).toList();
         }
 
@@ -71,7 +72,7 @@ public class StockService {
         for (Market m : markets) {
             LocalDate latestDate = getLatestDate(m);
             result.addAll(stockDailyCacheRepository
-                    .findByMarketAndTradeDateOrderByVolumeDesc(m, latestDate, top10)
+                    .findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(m, latestDate, Timeframe.DAILY, top10)
                     .stream().map(this::toDto).toList());
         }
         result.sort((a, b) -> Long.compare(
@@ -83,19 +84,19 @@ public class StockService {
     public StockDto getLatestStock(String ticker, Market market) {
         LocalDate latestDate = getLatestDate(market);
         return stockDailyCacheRepository
-                .findByTickerAndMarketAndTradeDate(ticker, market, latestDate)
+                .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, market, latestDate, Timeframe.DAILY)
                 .map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
 
     public LocalDate getLatestDate(Market market) {
         if (market != null) {
-            return stockDailyCacheRepository.findFirstByMarketOrderByTradeDateDesc(market)
+            return stockDailyCacheRepository.findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, Timeframe.DAILY)
                     .map(StockDailyCache::getTradeDate).orElse(LocalDate.now());
         }
-        LocalDate krDate = stockDailyCacheRepository.findFirstByMarketOrderByTradeDateDesc(Market.KOSPI)
+        LocalDate krDate = stockDailyCacheRepository.findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.KOSPI, Timeframe.DAILY)
                 .map(StockDailyCache::getTradeDate).orElse(LocalDate.MIN);
-        LocalDate usDate = stockDailyCacheRepository.findFirstByMarketOrderByTradeDateDesc(Market.NYSE)
+        LocalDate usDate = stockDailyCacheRepository.findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NYSE, Timeframe.DAILY)
                 .map(StockDailyCache::getTradeDate).orElse(LocalDate.MIN);
         return krDate.isAfter(usDate) ? krDate : usDate;
     }
