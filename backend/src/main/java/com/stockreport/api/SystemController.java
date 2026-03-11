@@ -1,5 +1,6 @@
 package com.stockreport.api;
 
+import com.stockreport.service.DataCollectionStatusService;
 import com.stockreport.service.NewsService;
 import com.stockreport.service.data.KrStockDataService;
 import com.stockreport.service.data.UsStockDataService;
@@ -24,6 +25,17 @@ public class SystemController {
     private final KrStockDataService krStockDataService;
     private final UsStockDataService usStockDataService;
     private final NewsService newsService;
+    private final DataCollectionStatusService statusService;
+
+    @GetMapping("/collection-status")
+    public ResponseEntity<?> getCollectionStatus() {
+        return ResponseEntity.ok(Map.of(
+                "status", statusService.getStatus().name(),
+                "message", statusService.getMessage(),
+                "collecting", statusService.isCollecting(),
+                "lastUpdated", statusService.getLastUpdated()
+        ));
+    }
 
     @GetMapping("/cache-status")
     public ResponseEntity<?> getCacheStatus() {

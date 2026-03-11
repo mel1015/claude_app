@@ -1,5 +1,6 @@
 package com.stockreport.scheduler;
 
+import com.stockreport.service.DataCollectionStatusService;
 import com.stockreport.service.NewsService;
 import com.stockreport.service.data.KrStockDataService;
 import com.stockreport.service.data.UsStockDataService;
@@ -31,11 +32,15 @@ public class StartupDataCollector implements ApplicationRunner {
         private final KrStockDataService krStockDataService;
         private final UsStockDataService usStockDataService;
         private final NewsService newsService;
+        private final DataCollectionStatusService statusService;
 
         @Async
         public void collect() {
+            statusService.start("데이터 수집 중...");
+
             try {
                 log.info("[수집 시작] 한국 주식 데이터");
+                statusService.start("한국 주식 데이터 수집 중...");
                 krStockDataService.fetchAndSaveKrStocks();
                 log.info("[수집 완료] 한국 주식 데이터");
             } catch (Exception e) {
@@ -44,6 +49,7 @@ public class StartupDataCollector implements ApplicationRunner {
 
             try {
                 log.info("[수집 시작] 미국 주식 데이터");
+                statusService.start("미국 주식 데이터 수집 중...");
                 usStockDataService.fetchAndSaveUsStocks();
                 log.info("[수집 완료] 미국 주식 데이터");
             } catch (Exception e) {
@@ -52,6 +58,7 @@ public class StartupDataCollector implements ApplicationRunner {
 
             try {
                 log.info("[수집 시작] 뉴스");
+                statusService.start("뉴스 수집 중...");
                 newsService.fetchKrNews();
                 newsService.fetchUsNews();
                 newsService.deleteOldNews();
@@ -61,6 +68,7 @@ public class StartupDataCollector implements ApplicationRunner {
             }
 
             log.info("시작 시 데이터 수집 완료.");
+            statusService.complete("데이터 수집 완료");
         }
     }
 }
