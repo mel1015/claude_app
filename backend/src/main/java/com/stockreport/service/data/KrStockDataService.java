@@ -77,15 +77,28 @@ public class KrStockDataService {
 
     private void fetchMarket(Market market, String sosok, LocalDate today,
                              Timeframe timeframe, String navTimeframe, int count) throws Exception {
+        // 오늘 데이터가 이미 수집되어 있으면 전체 skip
+        if (timeframe == Timeframe.DAILY) {
+            LocalDate latestInDb = stockDailyCacheRepository
+                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, timeframe)
+                    .map(StockDailyCache::getTradeDate).orElse(null);
+            if (today.equals(latestInDb)) {
+                log.info("[{}][{}] 오늘 데이터 이미 수집됨, skip", market, timeframe);
+                return;
+            }
+        }
+
         List<StockInfo> stocks = fetchStockList(sosok, today);
         log.info("Fetched {} {} stocks from Naver Finance market summary", stocks.size(), market);
 
         int saved = 0;
         for (StockInfo info : stocks) {
             try {
-                processStock(info, market, today, timeframe, navTimeframe, count);
-                saved++;
-                Thread.sleep(80); // rate limiting
+                boolean fetched = processStock(info, market, today, timeframe, navTimeframe, count);
+                if (fetched) {
+                    saved++;
+                    Thread.sleep(80); // rate limiting (API 호출이 있을 때만)
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
@@ -96,10 +109,23 @@ public class KrStockDataService {
         log.info("Saved {}/{} {} stocks", saved, stocks.size(), market);
     }
 
-    private void processStock(StockInfo info, Market market, LocalDate today,
+    /** @return API 호출이 실제로 발생했으면 true */
+    private boolean processStock(StockInfo info, Market market, LocalDate today,
                               Timeframe timeframe, String navTimeframe, int count) throws Exception {
-        List<OhlcvRow> history = fetchOhlcvHistory(info.code, navTimeframe, count);
-        if (history.isEmpty()) return;
+        // 오늘 데이터 이미 있으면 API 호출 없이 skip
+        if (stockDailyCacheRepository.findByTickerAndMarketAndTradeDateAndTimeframe(
+                info.code, market, today, timeframe).isPresent()) {
+            return false;
+        }
+
+        // 히스토리 여부에 따라 fetch count 결정 (처음 수집이면 full, 이후엔 최신 5개면 충분)
+        boolean hasHistory = stockDailyCacheRepository
+                .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(info.code, market, timeframe)
+                .isPresent();
+        int fetchCount = hasHistory ? 5 : count;
+
+        List<OhlcvRow> history = fetchOhlcvHistory(info.code, navTimeframe, fetchCount);
+        if (history.isEmpty()) return true;
 
         for (OhlcvRow row : history) {
             boolean exists = stockDailyCacheRepository
@@ -132,6 +158,7 @@ public class KrStockDataService {
                     indicatorService.calculateAndSetIndicators(hist, latest);
                     stockDailyCacheRepository.save(latest);
                 });
+        return true;
     }
 
     /**

@@ -58,13 +58,19 @@ GEMINI_API_KEY=your_key ./gradlew bootRun
 
 ### 4. 초기 데이터 수집
 
-백엔드 최초 실행 후 데이터베이스가 비어 있으므로 수동으로 수집을 트리거합니다.
+백엔드가 시작되면 **일봉 데이터를 자동으로 백그라운드 수집**합니다. 프론트엔드 상단 배너로 수집 진행 상황을 확인할 수 있습니다.
 
 ```bash
-# 일봉 데이터 수집 (기본)
-curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=KR&timeframe=DAILY"
-curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=US&timeframe=DAILY"
+# 수집 상태 확인
+curl http://localhost:8080/api/v1/system/collection-status
+# {"status":"COLLECTING","collecting":true,"message":"한국 주식 데이터 수집 중..."}
+```
 
+최초 수집(DB가 비어있는 경우) 시 일봉 KR 약 10분, US 약 15분이 소요됩니다. 이후 재시작 시에는 당일 데이터가 이미 있으면 즉시 skip됩니다.
+
+주봉/월봉 데이터는 수동으로 수집합니다.
+
+```bash
 # 주봉 데이터 수집
 curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=KR&timeframe=WEEKLY"
 curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=US&timeframe=WEEKLY"
@@ -72,12 +78,7 @@ curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=US&timefram
 # 월봉 데이터 수집
 curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=KR&timeframe=MONTHLY"
 curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=US&timeframe=MONTHLY"
-
-# 뉴스
-curl -X POST "http://localhost:8080/api/v1/system/refresh-cache?type=NEWS"
 ```
-
-일봉 KR 약 10분, US 약 15분 / 주봉·월봉은 각각 비슷하게 소요됩니다.
 
 ### 5. 프론트엔드 실행
 
@@ -125,6 +126,7 @@ POST /api/v1/signals/{id}/run                  # 시그널 즉시 실행
 POST /api/v1/signals/analyze                   # Gemini AI 전략 분석
 POST /api/v1/signals/parse-text                # 자연어 → 시그널 조건 변환
 GET  /api/v1/news?market=ALL                   # 뉴스 목록
+GET  /api/v1/system/collection-status              # 데이터 수집 상태 조회
 POST /api/v1/system/refresh-cache?type=KR|US|NEWS&timeframe=DAILY|WEEKLY|MONTHLY
 ```
 
