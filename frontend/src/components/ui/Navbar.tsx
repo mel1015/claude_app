@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, Star, TrendingUp, Bell, Newspaper } from "lucide-react";
+import { BarChart2, Star, TrendingUp, Bell, Newspaper, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { DataRefreshButton } from "./DataRefreshButton";
 
 const navItems = [
   { href: "/", label: "대시보드", icon: BarChart2 },
+  { href: "/stocks", label: "주식", icon: Search },
   { href: "/favorites", label: "즐겨찾기", icon: Star },
   { href: "/top-volume", label: "거래량TOP", icon: TrendingUp },
   { href: "/signals", label: "시그널", icon: Bell },
