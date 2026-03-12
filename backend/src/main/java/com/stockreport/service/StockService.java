@@ -1,5 +1,6 @@
 package com.stockreport.service;
 
+import com.stockreport.domain.favorite.FavoriteRepository;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;
@@ -19,6 +20,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -26,25 +29,42 @@ import java.util.Map;
 public class StockService {
 
     private final StockDailyCacheRepository stockDailyCacheRepository;
+    private final FavoriteRepository favoriteRepository;
+
+    private Set<String> loadFavoriteKeys() {
+        return favoriteRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(f -> f.getTicker() + "|" + f.getMarket().name())
+                .collect(Collectors.toSet());
+    }
 
     public Page<StockDto> getStocks(String market, String query, Pageable pageable) {
+        Set<String> favKeys = loadFavoriteKeys();
         if (query != null && !query.isEmpty()) {
-            LocalDate latestDate = getLatestDate(null);
-            return stockDailyCacheRepository.searchByTickerOrNameAndTimeframe(query, latestDate, Timeframe.DAILY, pageable).map(this::toDto);
+            if (market == null || market.equals("ALL")) {
+                LocalDate krDate = getLatestDate(Market.KOSPI);
+                LocalDate usDate = getLatestDate(Market.NYSE);
+                return stockDailyCacheRepository.searchByTickerOrNameLatest(query, krDate, usDate, Timeframe.DAILY, pageable).map(s -> toDto(s, favKeys));
+            }
+            Market marketEnum = Market.valueOf(market.toUpperCase());
+            LocalDate latestDate = getLatestDate(marketEnum);
+            return stockDailyCacheRepository.searchByTickerOrNameAndTimeframe(query, latestDate, Timeframe.DAILY, pageable).map(s -> toDto(s, favKeys));
         }
         if (market == null || market.equals("ALL")) {
-            return stockDailyCacheRepository.findByTimeframe(Timeframe.DAILY, pageable).map(this::toDto);
+            LocalDate krDate = getLatestDate(Market.KOSPI);
+            LocalDate usDate = getLatestDate(Market.NYSE);
+            return stockDailyCacheRepository.findLatestAllByTimeframe(krDate, usDate, Timeframe.DAILY, pageable).map(s -> toDto(s, favKeys));
         }
         Market marketEnum = Market.valueOf(market.toUpperCase());
         LocalDate latestDate = getLatestDate(marketEnum);
-        return stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframe(marketEnum, latestDate, Timeframe.DAILY, pageable).map(this::toDto);
+        return stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframe(marketEnum, latestDate, Timeframe.DAILY, pageable).map(s -> toDto(s, favKeys));
     }
 
     public StockDto getStock(String market, String ticker) {
+        Set<String> favKeys = loadFavoriteKeys();
         Market marketEnum = Market.valueOf(market.toUpperCase());
         return stockDailyCacheRepository
                 .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, Timeframe.DAILY)
-                .map(this::toDto)
+                .map(s -> toDto(s, favKeys))
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
 
@@ -109,6 +129,13 @@ public class StockService {
     }
 
     public StockDto toDto(StockDailyCache stock) {
+        return toDto(stock, null);
+    }
+
+    public StockDto toDto(StockDailyCache stock, Set<String> favoriteKeys) {
+        boolean isFav = favoriteKeys != null
+                && stock.getMarket() != null
+                && favoriteKeys.contains(stock.getTicker() + "|" + stock.getMarket().name());
         return StockDto.builder()
                 .id(stock.getId()).ticker(stock.getTicker())
                 .market(stock.getMarket() != null ? stock.getMarket().name() : null)
@@ -119,6 +146,7 @@ public class StockService {
                 .changeRate(stock.getChangeRate()).ma5(stock.getMa5())
                 .ma10(stock.getMa10()).ma20(stock.getMa20()).ma60(stock.getMa60()).rsi14(stock.getRsi14())
                 .macd(stock.getMacd()).macdSignal(stock.getMacdSignal()).macdHist(stock.getMacdHist())
+                .isFavorite(isFav)
                 .build();
     }
 }
