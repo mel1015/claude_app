@@ -14,6 +14,9 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.Charset;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -77,14 +80,21 @@ public class KrStockDataService {
 
     private void fetchMarket(Market market, String sosok, LocalDate today,
                              Timeframe timeframe, String navTimeframe, int count) throws Exception {
-        // 오늘 데이터가 이미 수집되어 있으면 전체 skip
+        // 오늘 데이터가 이미 수집되어 있고, 장 마감(15:30 KST) 이후에 수집된 경우에만 skip
         if (timeframe == Timeframe.DAILY) {
-            LocalDate latestInDb = stockDailyCacheRepository
+            StockDailyCache latest = stockDailyCacheRepository
                     .findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, timeframe)
-                    .map(StockDailyCache::getTradeDate).orElse(null);
-            if (today.equals(latestInDb)) {
-                log.info("[{}][{}] 오늘 데이터 이미 수집됨, skip", market, timeframe);
-                return;
+                    .orElse(null);
+            if (latest != null && today.equals(latest.getTradeDate())) {
+                LocalDateTime collectedAt = latest.getCollectedAt();
+                LocalTime marketClose = LocalTime.of(15, 30);
+                boolean collectedAfterClose = collectedAt != null &&
+                        collectedAt.atZone(ZoneId.of("Asia/Seoul")).toLocalTime().isAfter(marketClose);
+                if (collectedAfterClose) {
+                    log.info("[{}][{}] 장 마감 후 수집된 확정 데이터 존재, skip", market, timeframe);
+                    return;
+                }
+                log.info("[{}][{}] 오늘 데이터 있으나 장 마감 전 수집분, 재수집", market, timeframe);
             }
         }
 
@@ -112,10 +122,16 @@ public class KrStockDataService {
     /** @return API 호출이 실제로 발생했으면 true */
     private boolean processStock(StockInfo info, Market market, LocalDate today,
                               Timeframe timeframe, String navTimeframe, int count) throws Exception {
-        // 오늘 데이터 이미 있으면 API 호출 없이 skip
-        if (stockDailyCacheRepository.findByTickerAndMarketAndTradeDateAndTimeframe(
-                info.code, market, today, timeframe).isPresent()) {
-            return false;
+        // 오늘 데이터가 장 마감(15:30 KST) 이후 수집된 확정 데이터면 skip
+        StockDailyCache existing = stockDailyCacheRepository
+                .findByTickerAndMarketAndTradeDateAndTimeframe(info.code, market, today, timeframe)
+                .orElse(null);
+        if (existing != null) {
+            LocalDateTime collectedAt = existing.getCollectedAt();
+            LocalTime marketClose = LocalTime.of(15, 30);
+            boolean collectedAfterClose = collectedAt != null &&
+                    collectedAt.atZone(ZoneId.of("Asia/Seoul")).toLocalTime().isAfter(marketClose);
+            if (collectedAfterClose) return false;
         }
 
         // 히스토리 여부에 따라 fetch count 결정 (처음 수집이면 full, 이후엔 최신 5개면 충분)
@@ -127,22 +143,27 @@ public class KrStockDataService {
         List<OhlcvRow> history = fetchOhlcvHistory(info.code, navTimeframe, fetchCount);
         if (history.isEmpty()) return true;
 
+        LocalDateTime now = LocalDateTime.now();
         for (OhlcvRow row : history) {
-            boolean exists = stockDailyCacheRepository
+            StockDailyCache cache = stockDailyCacheRepository
                     .findByTickerAndMarketAndTradeDateAndTimeframe(info.code, market, row.date, timeframe)
-                    .isPresent();
-            if (exists) continue;
+                    .orElseGet(() -> StockDailyCache.builder()
+                            .ticker(info.code).market(market).name(info.name)
+                            .tradeDate(row.date).timeframe(timeframe).build());
+
+            // 과거 데이터는 이미 있으면 skip (오늘 데이터는 항상 갱신)
+            if (cache.getId() != null && !row.date.equals(today)) continue;
 
             double changeRate = row.date.equals(today) ? info.changeRate : calcChangeRate(row, history);
-
-            StockDailyCache cache = StockDailyCache.builder()
-                    .ticker(info.code).market(market).name(info.name)
-                    .tradeDate(row.date).timeframe(timeframe)
-                    .openPrice(row.open).highPrice(row.high)
-                    .lowPrice(row.low).closePrice(row.close)
-                    .volume(row.volume).changeRate(changeRate)
-                    .marketCap(row.date.equals(today) && timeframe == Timeframe.DAILY ? info.marketCap : null)
-                    .build();
+            cache.setName(info.name);
+            cache.setOpenPrice(row.open);
+            cache.setHighPrice(row.high);
+            cache.setLowPrice(row.low);
+            cache.setClosePrice(row.close);
+            cache.setVolume(row.volume);
+            cache.setChangeRate(changeRate);
+            cache.setMarketCap(row.date.equals(today) && timeframe == Timeframe.DAILY ? info.marketCap : null);
+            cache.setCollectedAt(now);
             stockDailyCacheRepository.save(cache);
         }
 
