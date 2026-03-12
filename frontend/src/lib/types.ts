@@ -53,7 +53,7 @@ export interface SignalCondition {
 export interface SignalLeaf {
   id: string;
   field: string;
-  operator: ">" | ">=" | "<" | "<=" | "==" | "!=";
+  operator: ">" | ">=" | "<" | "<=" | "==" | "!=" | "crossover" | "crossunder";
   value?: number;
   compareField?: string;
 }

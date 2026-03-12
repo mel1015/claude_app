@@ -35,6 +35,8 @@ public interface StockDailyCacheRepository extends MongoRepository<StockDailyCac
 
     Optional<StockDailyCache> findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market market, Timeframe timeframe);
 
+    Optional<StockDailyCache> findFirstByMarketAndTimeframeAndTradeDateBeforeOrderByTradeDateDesc(Market market, Timeframe timeframe, LocalDate date);
+
     Page<StockDailyCache> findByMarketAndTradeDate(Market market, LocalDate tradeDate, Pageable pageable);
 
     Page<StockDailyCache> findByMarketAndTradeDateAndTimeframe(Market market, LocalDate tradeDate, Timeframe timeframe, Pageable pageable);

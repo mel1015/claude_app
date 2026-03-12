@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -140,11 +141,23 @@ public class SignalService {
                 LocalDate latestDate = stockDailyCacheRepository
                         .findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, timeframe)
                         .map(StockDailyCache::getTradeDate).orElse(LocalDate.now());
+
+                // 크로스오버 조건을 위한 이전 봉 데이터 (ticker → stockMap)
+                LocalDate prevDate = stockDailyCacheRepository
+                        .findFirstByMarketAndTimeframeAndTradeDateBeforeOrderByTradeDateDesc(market, timeframe, latestDate)
+                        .map(StockDailyCache::getTradeDate).orElse(null);
+                Map<String, Map<String, Double>> prevStocksMap = prevDate != null
+                        ? stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(
+                                market, prevDate, timeframe, PageRequest.of(0, Integer.MAX_VALUE))
+                                .stream().collect(Collectors.toMap(StockDailyCache::getTicker, signalEvaluator::stockToMap))
+                        : Map.of();
+
                 List<StockDailyCache> stocks = stockDailyCacheRepository
                         .findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(market, latestDate, timeframe, PageRequest.of(0, Integer.MAX_VALUE));
                 for (StockDailyCache stock : stocks) {
-                    Map<String, Double> stockMap = signalEvaluator.stockToMap(stock);
-                    if (signalEvaluator.evaluate(conditions, stockMap)) matched.add(stockService.toDto(stock));
+                    Map<String, Double> currentMap = signalEvaluator.stockToMap(stock);
+                    Map<String, Double> prevMap = prevStocksMap.get(stock.getTicker());
+                    if (signalEvaluator.evaluate(conditions, currentMap, prevMap)) matched.add(stockService.toDto(stock));
                 }
             }
             return matched;
