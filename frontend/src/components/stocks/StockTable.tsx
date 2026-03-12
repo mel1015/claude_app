@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { Star, StarOff } from "lucide-react";
+import { Star, StarOff, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { StockDto } from "@/lib/types";
 import { formatPrice, formatChangeRate, formatVolume, getChangeColor, cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+
+type SortKey = "name" | "market" | "closePrice" | "changeRate" | "volume" | "rsi14" | "ma20";
+type SortDir = "asc" | "desc";
 
 interface StockTableProps {
   stocks: StockDto[];
@@ -13,20 +16,73 @@ interface StockTableProps {
   onFavoriteToggle?: () => void;
 }
 
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | null; sortDir: SortDir }) {
+  if (sortKey !== col) return <ChevronsUpDown className="inline h-3 w-3 ml-1 text-muted-foreground/50" />;
+  return sortDir === "asc"
+    ? <ChevronUp className="inline h-3 w-3 ml-1" />
+    : <ChevronDown className="inline h-3 w-3 ml-1" />;
+}
+
 export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle }: StockTableProps) {
   const [favoriteLoading, setFavoriteLoading] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(
+    () => new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`))
+  );
+
+  useEffect(() => {
+    setFavoriteKeys(new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`)));
+  }, [stocks]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  const sorted = useMemo(() => {
+    if (!sortKey) return stocks;
+    return [...stocks].sort((a, b) => {
+      const av = a[sortKey] ?? (typeof a[sortKey] === "string" ? "" : -Infinity);
+      const bv = b[sortKey] ?? (typeof b[sortKey] === "string" ? "" : -Infinity);
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [stocks, sortKey, sortDir]);
 
   const handleFavorite = async (stock: StockDto) => {
-    const key = `${stock.ticker}-${stock.market}`;
-    setFavoriteLoading(key);
+    const loadingKey = `${stock.ticker}-${stock.market}`;
+    const favKey = `${stock.ticker}|${stock.market}`;
+    const isFav = favoriteKeys.has(favKey);
+    setFavoriteLoading(loadingKey);
+    // 낙관적 업데이트
+    setFavoriteKeys((prev) => {
+      const next = new Set(prev);
+      isFav ? next.delete(favKey) : next.add(favKey);
+      return next;
+    });
     try {
-      await api.post("/api/v1/favorites", {
-        ticker: stock.ticker,
-        market: stock.market,
-        name: stock.name,
-      });
-      onFavoriteToggle?.();
+      if (isFav) {
+        await api.delete(`/api/v1/favorites/by-ticker?ticker=${stock.ticker}&market=${stock.market}`);
+      } else {
+        await api.post("/api/v1/favorites", {
+          ticker: stock.ticker,
+          market: stock.market,
+          name: stock.name,
+        });
+      }
     } catch (err) {
+      // 실패 시 롤백
+      setFavoriteKeys((prev) => {
+        const next = new Set(prev);
+        isFav ? next.add(favKey) : next.delete(favKey);
+        return next;
+      });
       console.error("Failed to toggle favorite:", err);
     } finally {
       setFavoriteLoading(null);
@@ -41,32 +97,42 @@ export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle
     );
   }
 
+  const th = (label: string, key: SortKey, align: "left" | "right" = "right") => (
+    <th
+      className={cn("px-4 py-3 font-medium cursor-pointer select-none hover:bg-muted/80 transition-colors", `text-${align}`)}
+      onClick={() => handleSort(key)}
+    >
+      {label}
+      <SortIcon col={key} sortKey={sortKey} sortDir={sortDir} />
+    </th>
+  );
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/50">
-            <th className="px-4 py-3 text-left font-medium">종목</th>
-            <th className="px-4 py-3 text-left font-medium">마켓</th>
-            <th className="px-4 py-3 text-right font-medium">현재가</th>
-            <th className="px-4 py-3 text-right font-medium">등락률</th>
-            <th className="px-4 py-3 text-right font-medium">거래량</th>
-            <th className="px-4 py-3 text-right font-medium">RSI</th>
-            <th className="px-4 py-3 text-right font-medium">MA20</th>
+            {th("종목", "name", "left")}
+            {th("마켓", "market", "left")}
+            {th("현재가", "closePrice")}
+            {th("등락률", "changeRate")}
+            {th("거래량", "volume")}
+            {th("RSI", "rsi14")}
+            {th("MA20", "ma20")}
             {showFavoriteButton && <th className="px-4 py-3 text-center font-medium">관심</th>}
           </tr>
         </thead>
         <tbody>
-          {stocks.map((stock) => (
+          {sorted.map((stock) => (
             <tr key={`${stock.ticker}-${stock.market}`} className="border-b hover:bg-muted/30 transition-colors">
               <td className="px-4 py-3">
                 <Link
                   href={`/stocks/${stock.ticker}?market=${stock.market}`}
                   className="font-medium text-primary hover:underline"
                 >
-                  {stock.ticker}
+                  {stock.name}
                 </Link>
-                <div className="text-xs text-muted-foreground">{stock.name}</div>
+                <div className="text-xs text-muted-foreground">{stock.ticker}</div>
               </td>
               <td className="px-4 py-3">
                 <span className="text-xs px-2 py-1 rounded bg-secondary text-secondary-foreground">
@@ -102,7 +168,7 @@ export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle
                     className="p-1 rounded hover:bg-accent"
                     title="즐겨찾기 추가"
                   >
-                    {stock.isFavorite ? (
+                    {favoriteKeys.has(`${stock.ticker}|${stock.market}`) ? (
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     ) : (
                       <StarOff className="h-4 w-4 text-muted-foreground" />

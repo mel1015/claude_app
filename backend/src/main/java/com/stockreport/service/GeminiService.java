@@ -124,13 +124,13 @@ public class GeminiService {
         }
     }
 
-    public String analyzeSignalStrategy(String signalName, String marketFilter, String conditionsJson) {
+    public String analyzeSignalStrategy(String signalName, String marketFilter, String timeframe, String conditionsJson) {
         if (apiKey == null || apiKey.isBlank()) {
             return "Gemini API 키가 설정되지 않았습니다. application.yml에 gemini.api-key를 설정해주세요.";
         }
 
         String humanReadable = conditionsToHumanReadable(conditionsJson);
-        String prompt = buildPrompt(signalName, marketFilter, humanReadable, conditionsJson);
+        String prompt = buildPrompt(signalName, marketFilter, timeframe, humanReadable, conditionsJson);
 
         try {
             Map<String, Object> requestBody = Map.of(
@@ -172,7 +172,7 @@ public class GeminiService {
         }
     }
 
-    private String buildPrompt(String name, String market, String humanReadable, String conditionsJson) {
+    private String buildPrompt(String name, String market, String timeframe, String humanReadable, String conditionsJson) {
         return """
                 당신은 주식 투자 전략 분석 전문가입니다.
                 아래 주식 시그널 전략을 분석하고 적합도를 평가해주세요.
@@ -180,6 +180,7 @@ public class GeminiService {
                 ## 시그널 정보
                 - 이름: %s
                 - 마켓: %s
+                - 기준 봉: %s
                 - 조건:
                 %s
                 ## 원본 조건 JSON (참고용)
@@ -195,7 +196,16 @@ public class GeminiService {
                 5. **적합도 점수** (1~10점, 10점이 최고)
 
                 간결하고 실용적으로 분석해주세요.
-                """.formatted(name, marketKorean(market), humanReadable, conditionsJson);
+                """.formatted(name, marketKorean(market), timeframeKorean(timeframe), humanReadable, conditionsJson);
+    }
+
+    private String timeframeKorean(String timeframe) {
+        if (timeframe == null) return "일봉";
+        return switch (timeframe) {
+            case "WEEKLY" -> "주봉";
+            case "MONTHLY" -> "월봉";
+            default -> "일봉";
+        };
     }
 
     private String marketKorean(String market) {
@@ -229,8 +239,13 @@ public class GeminiService {
         } else {
             String field = node.path("field").asText();
             String op = node.path("operator").asText();
-            double value = node.path("value").asDouble();
-            return indent + fieldLabel(field) + " " + op + " " + value + "\n";
+            String right;
+            if (node.has("compareField") && !node.path("compareField").asText().isBlank()) {
+                right = fieldLabel(node.path("compareField").asText());
+            } else {
+                right = String.valueOf(node.path("value").asDouble());
+            }
+            return indent + fieldLabel(field) + " " + op + " " + right + "\n";
         }
     }
 

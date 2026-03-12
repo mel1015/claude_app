@@ -103,8 +103,8 @@ public class SignalService {
         } catch (JsonProcessingException e) { return List.of(); }
     }
 
-    public String analyzeWithGemini(String name, String marketFilter, String conditions) {
-        return geminiService.analyzeSignalStrategy(name, marketFilter, conditions);
+    public String analyzeWithGemini(String name, String marketFilter, String timeframe, String conditions) {
+        return geminiService.analyzeSignalStrategy(name, marketFilter, timeframe, conditions);
     }
 
     public ParseTextResult parseTextToConditions(String text) {
