@@ -71,18 +71,20 @@ public class StockService {
     public List<StockDto> getStockHistory(String market, String ticker, int days) {
         Market marketEnum = Market.valueOf(market.toUpperCase());
         Pageable pageable = PageRequest.of(0, days, Sort.by("tradeDate").descending());
+        Set<String> favKeys = loadFavoriteKeys();
         return stockDailyCacheRepository
                 .findByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker.toUpperCase(), marketEnum, Timeframe.DAILY, pageable)
-                .stream().map(this::toDto).toList();
+                .stream().map(s -> toDto(s, favKeys)).toList();
     }
 
     public List<StockDto> getTopVolume(String market) {
         Pageable top10 = PageRequest.of(0, 10, Sort.by("volume").descending());
+        Set<String> favKeys = loadFavoriteKeys();
 
         if (market == null || market.equals("ALL")) {
             LocalDate latestDate = getLatestDate(null);
             return stockDailyCacheRepository.findByTradeDateAndTimeframeOrderByVolumeDesc(latestDate, Timeframe.DAILY, top10)
-                    .stream().map(this::toDto).toList();
+                    .stream().map(s -> toDto(s, favKeys)).toList();
         }
 
         List<Market> markets = market.equals("KR")
@@ -94,7 +96,7 @@ public class StockService {
             LocalDate latestDate = getLatestDate(m);
             result.addAll(stockDailyCacheRepository
                     .findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(m, latestDate, Timeframe.DAILY, top10)
-                    .stream().map(this::toDto).toList());
+                    .stream().map(s -> toDto(s, favKeys)).toList());
         }
         result.sort((a, b) -> Long.compare(
                 b.getVolume() != null ? b.getVolume() : 0L,
