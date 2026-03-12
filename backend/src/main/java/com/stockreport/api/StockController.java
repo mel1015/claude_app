@@ -5,6 +5,7 @@ import com.stockreport.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,7 +25,7 @@ public class StockController {
     public ResponseEntity<?> getStocks(
             @RequestParam(defaultValue = "ALL") String market,
             @RequestParam(required = false) String query,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "volume", direction = Sort.Direction.DESC) Pageable pageable) {
         Page<StockDto> stocks = stockService.getStocks(market, query, pageable);
         return ResponseEntity.ok(Map.of(
                 "data", stocks.getContent(),

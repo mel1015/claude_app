@@ -54,8 +54,8 @@ export default function FavoritesPage() {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-2">
                   <Link href={`/stocks/${fav.ticker}?market=${fav.market}`}>
-                    <div className="font-bold text-lg hover:text-primary">{fav.ticker}</div>
-                    <div className="text-xs text-muted-foreground">{fav.name}</div>
+                    <div className="font-bold text-lg hover:text-primary">{fav.name}</div>
+                    <div className="text-xs text-muted-foreground">{fav.ticker}</div>
                     <div className="text-xs text-muted-foreground">{fav.market}</div>
                   </Link>
                   <button

@@ -39,6 +39,13 @@ public class FavoriteController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/by-ticker")
+    public ResponseEntity<Void> removeFavoriteByTicker(
+            @RequestParam String ticker, @RequestParam String market) {
+        favoriteService.removeFavoriteByTickerAndMarket(ticker, market);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/check")
     public ResponseEntity<?> checkFavorite(@RequestParam String ticker, @RequestParam String market) {
         boolean isFavorite = favoriteService.checkFavorite(ticker, market);

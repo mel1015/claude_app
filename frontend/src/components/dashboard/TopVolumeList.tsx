@@ -29,11 +29,11 @@ export function TopVolumeList({ stocks, title }: TopVolumeListProps) {
               <div className="flex-1 min-w-0">
                 <Link
                   href={`/stocks/${stock.ticker}?market=${stock.market}`}
-                  className="font-medium text-sm hover:text-primary"
+                  className="font-medium text-sm hover:text-primary truncate block"
                 >
-                  {stock.ticker}
+                  {stock.name}
                 </Link>
-                <div className="text-xs text-muted-foreground truncate">{stock.name}</div>
+                <div className="text-xs text-muted-foreground">{stock.ticker}</div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-mono">

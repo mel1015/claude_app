@@ -39,9 +39,9 @@ export function FavoritesList({ favorites, onUpdate }: FavoritesListProps) {
                   href={`/stocks/${fav.ticker}?market=${fav.market}`}
                   className="font-medium text-sm hover:text-primary"
                 >
-                  {fav.ticker}
+                  {fav.name}
                 </Link>
-                <div className="text-xs text-muted-foreground">{fav.name}</div>
+                <div className="text-xs text-muted-foreground">{fav.ticker}</div>
               </div>
               {fav.latestStock && (
                 <div className="text-right">

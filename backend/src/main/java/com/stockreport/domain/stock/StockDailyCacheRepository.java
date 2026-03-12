@@ -46,4 +46,11 @@ public interface StockDailyCacheRepository extends MongoRepository<StockDailyCac
 
     @Query("{ '$or': [{'ticker': {'$regex': ?0, '$options': 'i'}}, {'name': {'$regex': ?0, '$options': 'i'}}], 'tradeDate': ?1, 'timeframe': ?2 }")
     Page<StockDailyCache> searchByTickerOrNameAndTimeframe(String query, LocalDate date, Timeframe timeframe, Pageable pageable);
+
+    // KR/US 최신 날짜가 다를 수 있으므로 시장 그룹별로 날짜를 분리 적용
+    @Query("{ '$or': [ {'market': {'$in': ['KOSPI', 'KOSDAQ']}, 'tradeDate': ?0}, {'market': {'$in': ['NYSE', 'NASDAQ']}, 'tradeDate': ?1} ], 'timeframe': ?2 }")
+    Page<StockDailyCache> findLatestAllByTimeframe(LocalDate krDate, LocalDate usDate, Timeframe timeframe, Pageable pageable);
+
+    @Query("{ '$and': [ { '$or': [{'ticker': {'$regex': ?0, '$options': 'i'}}, {'name': {'$regex': ?0, '$options': 'i'}}] }, { '$or': [{'market': {'$in': ['KOSPI', 'KOSDAQ']}, 'tradeDate': ?1}, {'market': {'$in': ['NYSE', 'NASDAQ']}, 'tradeDate': ?2}] }, {'timeframe': ?3} ] }")
+    Page<StockDailyCache> searchByTickerOrNameLatest(String query, LocalDate krDate, LocalDate usDate, Timeframe timeframe, Pageable pageable);
 }

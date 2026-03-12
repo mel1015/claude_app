@@ -11,6 +11,10 @@ export async function fetchApi<T>(path: string, options?: RequestInit): Promise<
     throw new Error((error as any)?.error?.message || `API error: ${res.status}`);
   }
 
+  if (res.status === 204 || res.headers.get("content-length") === "0") {
+    return undefined as T;
+  }
+
   return res.json();
 }
 
