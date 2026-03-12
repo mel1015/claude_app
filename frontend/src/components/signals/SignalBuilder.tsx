@@ -168,6 +168,7 @@ export function SignalBuilder({ onSaved, onCancel, initialData }: SignalBuilderP
       const payload = {
         name: formValues.name || "(이름 없음)",
         marketFilter: formValues.marketFilter || "ALL",
+        timeframe: formValues.timeframe || "DAILY",
         conditions: JSON.stringify(conditions),
       };
       const res = await api.post<{ data: { analysis: string } }>("/api/v1/signals/analyze", payload);
