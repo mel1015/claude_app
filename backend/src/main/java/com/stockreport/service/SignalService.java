@@ -40,6 +40,7 @@ public class SignalService {
     private final StockService stockService;
     private final ObjectMapper objectMapper;
     private final GeminiService geminiService;
+    private final SlackNotificationService slackNotificationService;
 
     public List<SignalDto> getSignals() {
         return signalRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toDto).toList();
@@ -91,6 +92,11 @@ public class SignalService {
         try { signal.setLastResult(objectMapper.writeValueAsString(results)); }
         catch (JsonProcessingException e) { log.warn("Failed to serialize results"); }
         signalRepository.save(signal);
+        if (!results.isEmpty()) {
+            Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
+            slackNotificationService.sendSignalAlert(
+                    signal.getName(), signal.getMarketFilter(), timeframe.name(), results);
+        }
         return results;
     }
 
