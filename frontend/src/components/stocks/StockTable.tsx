@@ -23,16 +23,17 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | 
     : <ChevronDown className="inline h-3 w-3 ml-1" />;
 }
 
+const toFavKeys = (stocks: StockDto[]) =>
+  new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`));
+
 export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle }: StockTableProps) {
   const [favoriteLoading, setFavoriteLoading] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(
-    () => new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`))
-  );
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => toFavKeys(stocks));
 
   useEffect(() => {
-    setFavoriteKeys(new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`)));
+    setFavoriteKeys(toFavKeys(stocks));
   }, [stocks]);
 
   const handleSort = (key: SortKey) => {
@@ -46,9 +47,10 @@ export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle
 
   const sorted = useMemo(() => {
     if (!sortKey) return stocks;
+    const getValue = (s: StockDto) => { const v = s[sortKey]; return v ?? (typeof v === "string" ? "" : -Infinity); };
     return [...stocks].sort((a, b) => {
-      const av = a[sortKey] ?? (typeof a[sortKey] === "string" ? "" : -Infinity);
-      const bv = b[sortKey] ?? (typeof b[sortKey] === "string" ? "" : -Infinity);
+      const av = getValue(a);
+      const bv = getValue(b);
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;

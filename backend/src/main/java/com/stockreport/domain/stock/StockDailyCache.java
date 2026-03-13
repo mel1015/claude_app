@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Document(collection = "stock_daily_cache")
 @CompoundIndexes({
@@ -51,4 +52,6 @@ public class StockDailyCache {
     private Double macd;
     private Double macdSignal;
     private Double macdHist;
+
+    private LocalDateTime collectedAt;
 }

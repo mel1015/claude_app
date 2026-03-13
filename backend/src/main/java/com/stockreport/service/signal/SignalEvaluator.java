@@ -15,12 +15,16 @@ import java.util.stream.StreamSupport;
 public class SignalEvaluator {
 
     public boolean evaluate(JsonNode node, Map<String, Double> stock) {
+        return evaluate(node, stock, null);
+    }
+
+    public boolean evaluate(JsonNode node, Map<String, Double> current, Map<String, Double> prev) {
         if (node == null) return false;
         if (node.has("conditions")) {
             String logic = node.path("logic").asText("AND");
             List<Boolean> results = StreamSupport
                     .stream(node.get("conditions").spliterator(), false)
-                    .map(c -> evaluate(c, stock))
+                    .map(c -> evaluate(c, current, prev))
                     .toList();
             return "AND".equals(logic)
                     ? results.stream().allMatch(r -> r)
@@ -28,9 +32,9 @@ public class SignalEvaluator {
         } else {
             String field = node.path("field").asText();
             String operator = node.path("operator").asText();
-            double val = stock.getOrDefault(field, 0.0);
+            double val = current.getOrDefault(field, 0.0);
             double cmp = node.has("compareField")
-                    ? stock.getOrDefault(node.path("compareField").asText(), 0.0)
+                    ? current.getOrDefault(node.path("compareField").asText(), 0.0)
                     : node.path("value").asDouble();
             return switch (operator) {
                 case ">"  -> val > cmp;
@@ -39,6 +43,22 @@ public class SignalEvaluator {
                 case "<=" -> val <= cmp;
                 case "==" -> Math.abs(val - cmp) < 0.0001;
                 case "!=" -> Math.abs(val - cmp) >= 0.0001;
+                case "crossover" -> {
+                    if (prev == null) yield false;
+                    double prevVal = prev.getOrDefault(field, 0.0);
+                    double prevCmp = node.has("compareField")
+                            ? prev.getOrDefault(node.path("compareField").asText(), 0.0)
+                            : node.path("value").asDouble();
+                    yield prevVal <= prevCmp && val > cmp;
+                }
+                case "crossunder" -> {
+                    if (prev == null) yield false;
+                    double prevVal = prev.getOrDefault(field, 0.0);
+                    double prevCmp = node.has("compareField")
+                            ? prev.getOrDefault(node.path("compareField").asText(), 0.0)
+                            : node.path("value").asDouble();
+                    yield prevVal >= prevCmp && val < cmp;
+                }
                 default -> { log.warn("Unknown operator: {}", operator); yield false; }
             };
         }

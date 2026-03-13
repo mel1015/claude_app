@@ -49,9 +49,8 @@ public class FavoriteService {
 
     @Transactional
     public void removeFavoriteByTickerAndMarket(String ticker, String market) {
-        Market marketEnum = Market.valueOf(market.toUpperCase());
-        favoriteRepository.findByTickerAndMarket(ticker.toUpperCase(), marketEnum)
-                .ifPresent(f -> favoriteRepository.deleteById(f.getId()));
+        favoriteRepository.deleteByTickerAndMarket(
+                ticker.toUpperCase(), Market.valueOf(market.toUpperCase()));
     }
 
     public boolean checkFavorite(String ticker, String market) {

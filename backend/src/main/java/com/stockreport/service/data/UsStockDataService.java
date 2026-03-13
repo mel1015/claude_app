@@ -53,17 +53,15 @@ public class UsStockDataService {
     private void fetchAndSaveUsStocksByTimeframe(String interval, String range, Timeframe timeframe) {
         log.info("Starting US stock data fetch ({})", timeframe);
 
-        // 오늘(ET) 데이터가 이미 수집되어 있으면 전체 skip
+        // 오늘(ET) 데이터가 장 마감(16:00 ET) 이후 수집된 확정 데이터면 전체 skip
         if (timeframe == Timeframe.DAILY) {
             LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
-            LocalDate latestNyse = stockDailyCacheRepository
-                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NYSE, timeframe)
-                    .map(StockDailyCache::getTradeDate).orElse(null);
-            LocalDate latestNasdaq = stockDailyCacheRepository
-                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NASDAQ, timeframe)
-                    .map(StockDailyCache::getTradeDate).orElse(null);
-            if (today.equals(latestNyse) && today.equals(latestNasdaq)) {
-                log.info("[US][{}] 오늘 데이터 이미 수집됨, skip", timeframe);
+            StockDailyCache latestNyse = stockDailyCacheRepository
+                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NYSE, timeframe).orElse(null);
+            StockDailyCache latestNasdaq = stockDailyCacheRepository
+                    .findFirstByMarketAndTimeframeOrderByTradeDateDesc(Market.NASDAQ, timeframe).orElse(null);
+            if (isCollectedAfterUsMarketClose(latestNyse, today) && isCollectedAfterUsMarketClose(latestNasdaq, today)) {
+                log.info("[US][{}] 장 마감 후 수집된 확정 데이터 존재, skip", timeframe);
                 return;
             }
         }
@@ -91,14 +89,15 @@ public class UsStockDataService {
 
     /** @return API 호출이 실제로 발생했으면 true */
     private boolean fetchStockData(String ticker, String interval, String range, Timeframe timeframe) throws Exception {
-        // 오늘 데이터 이미 있으면 API 호출 없이 skip
+        // 오늘 데이터가 장 마감(16:00 ET) 이후 수집된 확정 데이터면 skip
         if (timeframe == Timeframe.DAILY) {
             LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
-            boolean alreadyHas = stockDailyCacheRepository
-                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NYSE, today, timeframe).isPresent()
-                    || stockDailyCacheRepository
-                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NASDAQ, today, timeframe).isPresent();
-            if (alreadyHas) return false;
+            StockDailyCache existingNyse = stockDailyCacheRepository
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NYSE, today, timeframe).orElse(null);
+            StockDailyCache existingNasdaq = stockDailyCacheRepository
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, Market.NASDAQ, today, timeframe).orElse(null);
+            StockDailyCache existingToday = existingNyse != null ? existingNyse : existingNasdaq;
+            if (existingToday != null && isCollectedAfterUsMarketClose(existingToday, today)) return false;
 
             // 히스토리 있으면 range를 최소로 줄임 (처음 수집이면 full range 유지)
             boolean hasHistory = stockDailyCacheRepository
@@ -161,15 +160,18 @@ public class UsStockDataService {
                     .changeRate(changeRate).build());
         }
 
+        LocalDateTime now = LocalDateTime.now();
         for (int i = 0; i < entries.size(); i++) {
             StockDailyCache stock = entries.get(i);
             Optional<StockDailyCache> existing = stockDailyCacheRepository
                     .findByTickerAndMarketAndTradeDateAndTimeframe(stock.getTicker(), market, stock.getTradeDate(), timeframe);
             if (existing.isPresent()) {
                 copyFields(stock, existing.get());
+                existing.get().setCollectedAt(now);
                 if (i == entries.size() - 1) indicatorService.calculateAndSetIndicators(entries, existing.get());
                 stockDailyCacheRepository.save(existing.get());
             } else {
+                stock.setCollectedAt(now);
                 if (i == entries.size() - 1) indicatorService.calculateAndSetIndicators(entries, stock);
                 stockDailyCacheRepository.save(stock);
             }
@@ -186,6 +188,14 @@ public class UsStockDataService {
         if (!arr.isArray() || idx >= arr.size()) return null;
         JsonNode node = arr.get(idx);
         return (node == null || node.isNull()) ? null : node.asLong();
+    }
+
+    private boolean isCollectedAfterUsMarketClose(StockDailyCache cache, LocalDate today) {
+        if (cache == null || !today.equals(cache.getTradeDate())) return false;
+        LocalDateTime collectedAt = cache.getCollectedAt();
+        if (collectedAt == null) return false;
+        LocalTime collectedEt = collectedAt.atZone(ZoneId.of("America/New_York")).toLocalTime();
+        return collectedEt.isAfter(LocalTime.of(16, 0));
     }
 
     private void copyFields(StockDailyCache src, StockDailyCache dest) {

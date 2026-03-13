@@ -11,5 +11,6 @@ import java.util.Optional;
 public interface FavoriteRepository extends MongoRepository<Favorite, String> {
     boolean existsByTickerAndMarket(String ticker, Market market);
     Optional<Favorite> findByTickerAndMarket(String ticker, Market market);
+    void deleteByTickerAndMarket(String ticker, Market market);
     List<Favorite> findAllByOrderByCreatedAtDesc();
 }
