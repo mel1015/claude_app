@@ -51,8 +51,8 @@ git tag v1.1.0
 ```
 <type>(<scope>): <내용>
 
-type : feat | fix | chore | docs | refactor | test | hotfix
-scope: signal | stock | news | dashboard | backend | frontend | infra
+type : feat | fix | chore | docs | refactor | test | hotfix | perf
+scope: signal | stock | news | dashboard | favorites | backend | frontend | infra
 ```
 
 ### 브랜치 보호 규칙 (GitHub 권장 설정)

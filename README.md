@@ -12,6 +12,7 @@
 | 데이터 | Naver Finance (한국주식), Yahoo Finance (미국주식), RSS (뉴스) |
 | 지표 | ta4j (RSI, MACD, 이동평균 MA5/10/20/60) |
 | AI 분석 | Gemini 2.5 Flash (시그널 전략 검토 / 자연어 조건 생성) |
+| 알림 | Slack Incoming Webhook (시그널 매칭 알림) |
 
 ## 사전 요구사항
 
@@ -41,9 +42,14 @@ docker start mongo-stockreport
 ```bash
 # backend/.env
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Slack 알림 (선택사항 — 미설정 시 알림 없이 정상 동작)
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
 ```
 
 Gemini API 키는 [Google AI Studio](https://aistudio.google.com/apikey)에서 무료로 발급받을 수 있습니다.
+
+Slack Webhook URL은 [api.slack.com/apps](https://api.slack.com/apps)에서 앱 생성 후 **Incoming Webhooks** 메뉴에서 발급받을 수 있습니다.
 
 ### 3. 백엔드 실행
 
@@ -137,6 +143,7 @@ POST /api/v1/system/refresh-cache?type=KR|US|NEWS&timeframe=DAILY|WEEKLY|MONTHLY
 | KrDataScheduler | 매일 18:00 KST (월-금) | KOSPI/KOSDAQ 일봉 + 기술지표 |
 | UsDataScheduler | 매일 07:00 KST (화-토) | NYSE/NASDAQ 일봉 + 기술지표 |
 | NewsScheduler | 4시간마다 | 한국/미국 주식 뉴스 RSS |
+| SignalScheduler | 데이터 수집 완료 직후 | 활성 시그널 자동 실행 + Slack 알림 |
 
 주봉·월봉은 자동 스케줄 없이 수동 수집(`refresh-cache?timeframe=WEEKLY|MONTHLY`)으로 갱신합니다.
 
