@@ -59,6 +59,8 @@ public class GeminiService {
 
                 ## 지원 연산자 (operator)
                 >, >=, <, <=, ==, !=
+                crossover: 이전 봉에서는 미충족, 현재 봉에서 충족 (상향 돌파)
+                crossunder: 이전 봉에서는 충족, 현재 봉에서 미충족 (하향 이탈)
 
                 ## timeframe 감지
                 - 월봉/월간/월 기준 언급 시: "timeframe": "MONTHLY"
@@ -73,6 +75,8 @@ public class GeminiService {
 
                 ## 변환 규칙
                 - "종가가 MA 위" → field: close_price, compareField: 해당 MA 필드
+                - "종가가 MA10 상향 돌파/골든크로스" → operator: crossover, compareField: ma10
+                - "종가가 MA10 하향 이탈/데드크로스" → operator: crossunder, compareField: ma10
                 - 숫자 비교는 value, 필드 간 비교는 compareField 사용
                 - value와 compareField 중 반드시 하나만 사용
                 - 조건이 모호해도 반드시 가장 합리적인 조건 하나 이상 생성
@@ -186,6 +190,10 @@ public class GeminiService {
                 ## 원본 조건 JSON (참고용)
                 %s
 
+                ## 참고: 연산자 설명
+                - crossover: 이전 봉 미충족 → 현재 봉 충족 (상향 돌파)
+                - crossunder: 이전 봉 충족 → 현재 봉 미충족 (하향 이탈)
+
                 ## 평가 항목
                 다음 항목을 한국어로 분석해주세요:
 
@@ -245,7 +253,12 @@ public class GeminiService {
             } else {
                 right = String.valueOf(node.path("value").asDouble());
             }
-            return indent + fieldLabel(field) + " " + op + " " + right + "\n";
+            String opLabel = switch (op) {
+                case "crossover"  -> "상향돌파";
+                case "crossunder" -> "하향이탈";
+                default -> op;
+            };
+            return indent + fieldLabel(field) + " " + opLabel + " " + right + "\n";
         }
     }
 

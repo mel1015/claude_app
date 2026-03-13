@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
@@ -33,6 +34,7 @@ public class StartupDataCollector implements ApplicationRunner {
         private final UsStockDataService usStockDataService;
         private final NewsService newsService;
         private final DataCollectionStatusService statusService;
+        private final ApplicationEventPublisher eventPublisher;
 
         @Async
         public void collect() {
@@ -69,6 +71,7 @@ public class StartupDataCollector implements ApplicationRunner {
 
             log.info("시작 시 데이터 수집 완료.");
             statusService.complete("데이터 수집 완료");
+            eventPublisher.publishEvent(new DataCollectionCompletedEvent(this));
         }
     }
 }

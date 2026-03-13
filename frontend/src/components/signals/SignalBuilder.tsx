@@ -32,6 +32,8 @@ const OPERATORS = [
   { value: "<=", label: "<=" },
   { value: "==", label: "==" },
   { value: "!=", label: "!=" },
+  { value: "crossover", label: "상향돌파 ↑" },
+  { value: "crossunder", label: "하향이탈 ↓" },
 ];
 
 const schema = z.object({

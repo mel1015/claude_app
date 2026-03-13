@@ -203,6 +203,7 @@ export default function SignalsPage() {
                   id: editingSignal.id,
                   name: editingSignal.name,
                   marketFilter: editingSignal.marketFilter,
+                  timeframe: editingSignal.timeframe,
                   active: editingSignal.active,
                   conditions: editingSignal.conditions,
                 }}
