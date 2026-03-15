@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
 } from "recharts";
 import type { StockDto } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -17,9 +18,10 @@ import { formatDate } from "@/lib/utils";
 interface PriceChartProps {
   data: StockDto[];
   market?: string;
+  referenceDates?: string[];
 }
 
-export function PriceChart({ data, market }: PriceChartProps) {
+export function PriceChart({ data, market, referenceDates }: PriceChartProps) {
   if (!data || data.length === 0) {
     return <div className="text-center py-12 text-muted-foreground">차트 데이터가 없습니다</div>;
   }
@@ -67,6 +69,9 @@ export function PriceChart({ data, market }: PriceChartProps) {
           <Line type="monotone" dataKey="ma5" stroke="#f59e0b" dot={false} strokeWidth={1} name="MA5" />
           <Line type="monotone" dataKey="ma20" stroke="#10b981" dot={false} strokeWidth={1} name="MA20" />
           <Line type="monotone" dataKey="ma60" stroke="#8b5cf6" dot={false} strokeWidth={1} name="MA60" />
+          {referenceDates?.map((date) => (
+            <ReferenceLine key={date} x={date} stroke="#ef4444" strokeDasharray="4 2" label={{ value: "매칭", fontSize: 10, fill: "#ef4444" }} />
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
 
