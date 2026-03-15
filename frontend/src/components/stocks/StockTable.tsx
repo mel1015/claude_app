@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Star, StarOff, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import type { StockDto } from "@/lib/types";
@@ -14,6 +14,7 @@ interface StockTableProps {
   stocks: StockDto[];
   showFavoriteButton?: boolean;
   onFavoriteToggle?: () => void;
+  renderExtraColumn?: (stock: StockDto) => React.ReactNode;
 }
 
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | null; sortDir: SortDir }) {
@@ -26,7 +27,7 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey | 
 const toFavKeys = (stocks: StockDto[]) =>
   new Set(stocks.filter((s) => s.isFavorite).map((s) => `${s.ticker}|${s.market}`));
 
-export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle }: StockTableProps) {
+export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle, renderExtraColumn }: StockTableProps) {
   const [favoriteLoading, setFavoriteLoading] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -121,6 +122,7 @@ export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle
             {th("거래량", "volume")}
             {th("RSI", "rsi14")}
             {th("MA20", "ma20")}
+            {renderExtraColumn && <th className="px-4 py-3 text-center font-medium hidden md:table-cell">차트</th>}
             {showFavoriteButton && <th className="px-4 py-3 text-center font-medium">관심</th>}
           </tr>
         </thead>
@@ -162,6 +164,11 @@ export function StockTable({ stocks, showFavoriteButton = true, onFavoriteToggle
               <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                 {stock.ma20 != null ? formatPrice(stock.ma20, stock.market) : "-"}
               </td>
+              {renderExtraColumn && (
+                <td className="px-4 py-3 text-center hidden md:table-cell">
+                  {renderExtraColumn(stock)}
+                </td>
+              )}
               {showFavoriteButton && (
                 <td className="px-4 py-3 text-center">
                   <button

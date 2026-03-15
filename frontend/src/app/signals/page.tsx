@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSignals } from "@/hooks/useStocks";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -13,6 +13,8 @@ import { formatDate } from "@/lib/utils";
 import type { SignalDto, StockDto } from "@/lib/types";
 import { StockTable } from "@/components/stocks/StockTable";
 import { SignalBuilder } from "@/components/signals/SignalBuilder";
+import { SignalMiniChart } from "@/components/signals/SignalMiniChart";
+import { SignalDetailChart } from "@/components/signals/SignalDetailChart";
 
 export default function SignalsPage() {
   const { signals, error, isLoading, mutate } = useSignals();
@@ -20,6 +22,18 @@ export default function SignalsPage() {
   const [results, setResults] = useState<Record<string, StockDto[]>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editingSignal, setEditingSignal] = useState<SignalDto | null>(null);
+  const [selectedStock, setSelectedStock] = useState<StockDto | null>(null);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (selectedStock) { setSelectedStock(null); return; }
+        if (editingSignal) setEditingSignal(null);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [selectedStock, editingSignal]);
 
   const handleRun = async (id: string) => {
     setRunningId(id);
@@ -162,7 +176,18 @@ export default function SignalsPage() {
                           실행 결과: {results[signal.id].length}개 종목 매칭
                         </div>
                         {results[signal.id].length > 0 ? (
-                          <StockTable stocks={results[signal.id]} showFavoriteButton={false} />
+                          <StockTable
+                            stocks={results[signal.id]}
+                            showFavoriteButton={false}
+                            renderExtraColumn={(stock) => (
+                              <SignalMiniChart
+                                market={stock.market}
+                                ticker={stock.ticker}
+                                tradeDate={stock.tradeDate}
+                                onChartClick={() => setSelectedStock(stock)}
+                              />
+                            )}
+                          />
                         ) : (
                           <div className="text-sm text-muted-foreground text-center py-4">
                             조건에 맞는 종목이 없습니다
@@ -177,6 +202,9 @@ export default function SignalsPage() {
           ))}
         </div>
       )}
+
+      {/* 차트 상세 모달 */}
+      <SignalDetailChart stock={selectedStock} onClose={() => setSelectedStock(null)} />
 
       {/* 수정 모달 */}
       {editingSignal && (
