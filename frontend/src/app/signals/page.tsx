@@ -10,11 +10,75 @@ import { Badge } from "@/components/ui/Badge";
 import { Bell, Plus, Play, Trash2, ChevronDown, ChevronUp, Pencil, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-import type { SignalDto, StockDto } from "@/lib/types";
+import type { SignalDto, StockDto, SignalCondition, SignalLeaf, SignalGroup } from "@/lib/types";
 import { StockTable } from "@/components/stocks/StockTable";
 import { SignalBuilder } from "@/components/signals/SignalBuilder";
 import { SignalMiniChart } from "@/components/signals/SignalMiniChart";
 import { SignalDetailChart } from "@/components/signals/SignalDetailChart";
+
+const FIELD_LABELS: Record<string, string> = {
+  close_price: "종가", open_price: "시가", high_price: "고가", low_price: "저가",
+  volume: "거래량", change_rate: "등락률(%)",
+  ma5: "MA5", ma10: "MA10", ma20: "MA20", ma60: "MA60",
+  rsi14: "RSI(14)", macd: "MACD", macd_signal: "MACD Signal", macd_hist: "MACD Hist",
+};
+
+const OP_LABELS: Record<string, string> = {
+  ">": ">", ">=": "≥", "<": "<", "<=": "≤", "==": "=", "!=": "≠",
+  crossover: "상향돌파↑", crossunder: "하향이탈↓",
+};
+
+function isLeaf(node: SignalLeaf | SignalGroup): node is SignalLeaf {
+  return "field" in node;
+}
+
+function ConditionNode({ node, depth = 0 }: { node: SignalLeaf | SignalGroup; depth?: number }) {
+  if (isLeaf(node)) {
+    const field = FIELD_LABELS[node.field] ?? node.field;
+    const op = OP_LABELS[node.operator] ?? node.operator;
+    const right = node.compareField ? (FIELD_LABELS[node.compareField] ?? node.compareField) : node.value;
+    return (
+      <span className="inline-flex items-center gap-1 bg-muted px-2 py-0.5 rounded text-xs font-mono">
+        <span className="text-foreground font-medium">{field}</span>
+        <span className="text-muted-foreground">{op}</span>
+        <span className="text-primary">{String(right)}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {depth > 0 && <span className="text-xs text-muted-foreground">(</span>}
+      {node.conditions.map((child, i) => (
+        <span key={(child as SignalLeaf | SignalGroup).id} className="inline-flex items-center gap-1.5">
+          {i > 0 && (
+            <span className={`text-xs font-bold px-1 ${node.logic === "AND" ? "text-blue-500" : "text-orange-500"}`}>
+              {node.logic}
+            </span>
+          )}
+          <ConditionNode node={child} depth={depth + 1} />
+        </span>
+      ))}
+      {depth > 0 && <span className="text-xs text-muted-foreground">)</span>}
+    </span>
+  );
+}
+
+function ConditionSummary({ conditions }: { conditions: SignalCondition }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-sm">
+      {conditions.conditions.map((node, i) => (
+        <span key={(node as SignalLeaf | SignalGroup).id} className="inline-flex items-center gap-1.5">
+          {i > 0 && (
+            <span className={`text-xs font-bold px-1 ${conditions.logic === "AND" ? "text-blue-500" : "text-orange-500"}`}>
+              {conditions.logic}
+            </span>
+          )}
+          <ConditionNode node={node} />
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function SignalsPage() {
   const { signals, error, isLoading, mutate } = useSignals();
@@ -165,10 +229,10 @@ export default function SignalsPage() {
                 <CardContent>
                   <div className="space-y-4">
                     <div>
-                      <div className="text-xs text-muted-foreground mb-2">조건 (JSON)</div>
-                      <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-40">
-                        {JSON.stringify(signal.conditions, null, 2)}
-                      </pre>
+                      <div className="text-xs text-muted-foreground mb-2">조건</div>
+                      <div className="bg-muted p-3 rounded">
+                        <ConditionSummary conditions={signal.conditions} />
+                      </div>
                     </div>
                     {results[signal.id] !== undefined && (
                       <div>
