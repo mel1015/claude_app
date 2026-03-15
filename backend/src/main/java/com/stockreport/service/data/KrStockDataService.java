@@ -80,7 +80,8 @@ public class KrStockDataService {
 
     private void fetchMarket(Market market, String sosok, LocalDate today,
                              Timeframe timeframe, String navTimeframe, int count) throws Exception {
-        // 오늘 데이터가 이미 수집되어 있고, 장 마감(15:30 KST) 이후에 수집된 경우에만 skip
+        // 오늘 데이터가 이미 수집되어 있고, 장 마감(15:30 KST) 이후 수집된 경우에만 skip
+        // (서버 시작 시점과 무관하게 15:30 이후 수집 = 확정 종가)
         if (timeframe == Timeframe.DAILY) {
             StockDailyCache latest = stockDailyCacheRepository
                     .findFirstByMarketAndTimeframeOrderByTradeDateDesc(market, timeframe)
@@ -91,7 +92,7 @@ public class KrStockDataService {
                 boolean collectedAfterClose = collectedAt != null &&
                         collectedAt.atZone(ZoneId.of("Asia/Seoul")).toLocalTime().isAfter(marketClose);
                 if (collectedAfterClose) {
-                    log.info("[{}][{}] 장 마감 후 수집된 확정 데이터 존재, skip", market, timeframe);
+                    log.info("[{}][{}] 장 마감 후 수집된 확정 종가 데이터 존재, skip", market, timeframe);
                     return;
                 }
                 log.info("[{}][{}] 오늘 데이터 있으나 장 마감 전 수집분, 재수집", market, timeframe);
@@ -122,7 +123,7 @@ public class KrStockDataService {
     /** @return API 호출이 실제로 발생했으면 true */
     private boolean processStock(StockInfo info, Market market, LocalDate today,
                               Timeframe timeframe, String navTimeframe, int count) throws Exception {
-        // 오늘 데이터가 장 마감(15:30 KST) 이후 수집된 확정 데이터면 skip
+        // 오늘 데이터가 장 마감(15:30 KST) 이후 수집된 확정 종가면 skip
         StockDailyCache existing = stockDailyCacheRepository
                 .findByTickerAndMarketAndTradeDateAndTimeframe(info.code, market, today, timeframe)
                 .orElse(null);
