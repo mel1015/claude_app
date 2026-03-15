@@ -28,6 +28,12 @@ frontend/out/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+frontend/tsconfig.tsbuildinfo
+
+# ========================
+# OMC (oh-my-claudecode)
+# ========================
+.omc/
 
 # ========================
 # OS / Editor
