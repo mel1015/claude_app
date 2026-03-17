@@ -1,8 +1,8 @@
 package com.stockreport.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.stockreport.domain.signal.Signal;
 import com.stockreport.domain.signal.SignalRepository;
 import com.stockreport.domain.stock.Market;
@@ -90,7 +90,7 @@ public class SignalService {
         List<StockDto> results = executeSignal(signal);
         signal.setLastRunAt(LocalDateTime.now());
         try { signal.setLastResult(objectMapper.writeValueAsString(results)); }
-        catch (JsonProcessingException e) { log.warn("Failed to serialize results"); }
+        catch (JacksonException e) { log.warn("Failed to serialize results"); }
         signalRepository.save(signal);
         if (!results.isEmpty()) {
             Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
@@ -107,7 +107,7 @@ public class SignalService {
         try {
             return objectMapper.readValue(signal.getLastResult(),
                     objectMapper.getTypeFactory().constructCollectionType(List.class, StockDto.class));
-        } catch (JsonProcessingException e) { return List.of(); }
+        } catch (JacksonException e) { return List.of(); }
     }
 
     public String analyzeWithGemini(String name, String marketFilter, String timeframe, String conditions) {

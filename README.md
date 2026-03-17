@@ -6,7 +6,7 @@
 
 | 구분 | 기술 |
 |------|------|
-| Backend | Spring Boot 3.2.3 + Java 17 |
+| Backend | Spring Boot 4.0.3 + Java 25 |
 | Database | MongoDB 7 (Docker) |
 | Frontend | Next.js 14 + TypeScript + Tailwind CSS |
 | 데이터 | Naver Finance (한국주식), Yahoo Finance (미국주식), RSS (뉴스) |
@@ -16,7 +16,7 @@
 
 ## 사전 요구사항
 
-- Java 17+ (`java -version` 확인)
+- Java 25+ (`java -version` 확인)
 - Node.js 18+ (`node -v` 확인)
 - Docker (`docker -v` 확인)
 
@@ -56,7 +56,7 @@ Slack Webhook URL은 [api.slack.com/apps](https://api.slack.com/apps)에서 앱 
 ```bash
 cd backend
 
-# 첫 실행 시 Gradle 8.6 자동 다운로드 후 빌드됩니다 (2-3분 소요)
+# 첫 실행 시 Gradle 9.4 자동 다운로드 후 빌드됩니다 (2-3분 소요)
 GEMINI_API_KEY=your_key ./gradlew bootRun
 ```
 
@@ -177,7 +177,7 @@ POST /api/v1/system/refresh-cache?type=KR|US|NEWS&timeframe=DAILY|WEEKLY|MONTHLY
 
 ```
 claude_app/
-├── backend/                 # Spring Boot 3 (Java 17)
+├── backend/                 # Spring Boot 4 (Java 25)
 │   ├── build.gradle.kts
 │   ├── gradlew
 │   └── src/main/java/com/stockreport/

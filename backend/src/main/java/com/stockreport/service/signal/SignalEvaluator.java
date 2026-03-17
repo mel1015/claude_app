@@ -1,6 +1,6 @@
 package com.stockreport.service.signal;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.stockreport.domain.stock.StockDailyCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

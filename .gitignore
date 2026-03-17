@@ -17,7 +17,6 @@ backend/logs/
 backend/.idea/
 backend/*.iml
 backend/.env
-backend/src/main/resources/application-dev.yml
 
 # ========================
 # Frontend (Next.js)

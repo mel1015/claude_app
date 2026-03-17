@@ -1,6 +1,6 @@
 package com.stockreport.dto.response;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.stockreport.domain.stock.Timeframe;
 import lombok.*;
 
