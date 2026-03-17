@@ -3,13 +3,14 @@ spring:
     name: stock-report
   profiles:
     active: dev
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/stockreport
+  mongodb:
+    uri: mongodb://localhost:27017/stockreport
   jackson:
     time-zone: Asia/Seoul
-    serialization:
-      write-dates-as-timestamps: false
+
+  threads:
+    virtual:
+      enabled: true
 
 server:
   port: 8080

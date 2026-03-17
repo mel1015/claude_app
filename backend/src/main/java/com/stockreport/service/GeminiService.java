@@ -1,7 +1,7 @@
 package com.stockreport.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.stockreport.domain.stock.Timeframe;
 import com.stockreport.dto.response.ParseTextResult;
 import lombok.RequiredArgsConstructor;
@@ -118,7 +118,7 @@ public class GeminiService {
 
                 // timeframe 필드를 conditions JSON에서 제거
                 if (resultNode.has("timeframe")) {
-                    ((com.fasterxml.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
+                    ((tools.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
                 }
                 return new ParseTextResult(objectMapper.writeValueAsString(resultNode), timeframe);
             }

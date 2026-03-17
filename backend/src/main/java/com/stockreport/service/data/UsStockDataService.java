@@ -1,7 +1,7 @@
 package com.stockreport.service.data;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.stockreport.domain.stock.Market;
 import com.stockreport.domain.stock.StockDailyCache;
 import com.stockreport.domain.stock.StockDailyCacheRepository;

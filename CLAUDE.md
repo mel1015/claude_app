@@ -4,13 +4,13 @@
 
 한국(KOSPI/KOSDAQ) + 미국(NYSE/NASDAQ) 주식 일일 리포트 웹사이트.
 
-- **Backend**: Spring Boot 3.2.3 / Java 17 — `backend/`
+- **Backend**: Spring Boot 4.0.3 / Java 25 — `backend/`
 - **Frontend**: Next.js 14 / TypeScript — `frontend/`
-- **Database**: MongoDB 7 (Docker) — 컬렉션: `stock_daily_cache`, `news_cache`, `favorite`, `signal`
+- **Database**: MongoDB 7 (Docker) — 컬렉션: `stock_daily_cache`, `news_cache`, `favorites`, `signals`
 
 ## 개발 환경 요구사항
 
-- Java: **Temurin 17** (21 아님)
+- Java: **Temurin 25**
 - Node.js: 18+
 - Docker: MongoDB 컨테이너 실행 필요
 
@@ -29,7 +29,9 @@ cd backend && ./gradlew bootRun
 cd frontend && npm run dev
 ```
 
-> **gradlew APP_HOME 버그 주의**: APP_HOME 줄에서 `..` 제거 적용 완료. 건드리지 말 것.
+> **MongoDB 프로퍼티 변경 (Spring Boot 4)**: `spring.data.mongodb.uri` → `spring.mongodb.uri`로 변경됨. `application.yml`과 `application-dev.yml` 모두 새 키 사용.
+
+> **프로필 분리**: `application.yml` (prod: `stockreport`), `application-dev.yml` (dev: `stockreport-dev`). `spring.profiles.active: dev`로 개발 환경 자동 적용.
 
 ## 중요 파일 위치
 
