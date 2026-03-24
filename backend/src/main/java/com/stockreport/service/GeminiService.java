@@ -106,12 +106,12 @@ public class GeminiService {
                 JsonNode root = objectMapper.readTree(responseBody);
                 String result = root.path("candidates").get(0)
                         .path("content").path("parts").get(0)
-                        .path("text").asText("");
+                        .path("text").stringValue("");
                 result = result.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
 
                 // timeframe 추출 후 conditions에서 제거
                 JsonNode resultNode = objectMapper.readTree(result);
-                String timeframeStr = resultNode.path("timeframe").asText("DAILY");
+                String timeframeStr = resultNode.path("timeframe").stringValue("DAILY");
                 Timeframe timeframe;
                 try { timeframe = Timeframe.valueOf(timeframeStr); }
                 catch (Exception ex) { timeframe = Timeframe.DAILY; }
@@ -155,7 +155,7 @@ public class GeminiService {
                     log.error("Gemini API error {}: {}", response.code(), errBody);
                     try {
                         JsonNode errJson = objectMapper.readTree(errBody);
-                        String msg = errJson.path("error").path("message").asText();
+                        String msg = errJson.path("error").path("message").stringValue("");
                         return "Gemini API 오류 (HTTP " + response.code() + "): " + (msg.isBlank() ? errBody : msg);
                     } catch (Exception ignored) {
                         return "Gemini API 호출 실패: HTTP " + response.code() + " - " + errBody;
@@ -168,7 +168,7 @@ public class GeminiService {
                 JsonNode root = objectMapper.readTree(responseBody);
                 return root.path("candidates").get(0)
                         .path("content").path("parts").get(0)
-                        .path("text").asText("분석 결과를 가져올 수 없습니다.");
+                        .path("text").stringValue("분석 결과를 가져올 수 없습니다.");
             }
         } catch (Exception e) {
             log.error("Gemini API error", e);
@@ -237,7 +237,7 @@ public class GeminiService {
     private String nodeToString(JsonNode node, int depth) {
         String indent = "  ".repeat(depth);
         if (node.has("conditions")) {
-            String logic = node.path("logic").asText("AND");
+            String logic = node.path("logic").stringValue("AND");
             StringBuilder sb = new StringBuilder();
             sb.append(indent).append("[").append(logic).append("]\n");
             for (JsonNode child : node.get("conditions")) {
@@ -245,11 +245,12 @@ public class GeminiService {
             }
             return sb.toString();
         } else {
-            String field = node.path("field").asText();
-            String op = node.path("operator").asText();
+            String field = node.path("field").stringValue("");
+            String op = node.path("operator").stringValue("");
             String right;
-            if (node.has("compareField") && !node.path("compareField").asText().isBlank()) {
-                right = fieldLabel(node.path("compareField").asText());
+            String compareField = node.path("compareField").stringValue("");
+            if (node.has("compareField") && !compareField.isBlank()) {
+                right = fieldLabel(compareField);
             } else {
                 right = String.valueOf(node.path("value").asDouble());
             }
