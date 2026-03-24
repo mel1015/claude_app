@@ -211,12 +211,10 @@ public class KrStockDataService {
                 Matcher pctMatcher = PCT_PATTERN.matcher(rest);
                 double changeRate = pctMatcher.find() ? parseDouble(pctMatcher.group(1)) : 0.0;
 
-                double closePrice = nums.size() > 0 ? parseDouble(nums.get(0)) : 0;
-                // nums.get(1) = 액면가 (스킵)
-                long volume    = nums.size() > 2 ? parseLong(nums.get(2)) : 0;
+                // td.number: [0]=현재가, [1]=액면가, [2]=거래량, [3]=시가총액(억) — 0·2는 OHLCV에서 수집
                 double marketCap = nums.size() > 3 ? parseDouble(nums.get(3)) * 100_000_000L : 0; // 억원→원
 
-                result.add(new StockInfo(code, name, closePrice, changeRate, volume, marketCap));
+                result.add(new StockInfo(code, name, changeRate, marketCap));
             }
 
             if (!foundAny) {
@@ -284,22 +282,15 @@ public class KrStockDataService {
         catch (Exception e) { return 0.0; }
     }
 
-    private long parseLong(String v) {
-        try { return Long.parseLong(v.replace(",", "").trim()); }
-        catch (Exception e) { return 0L; }
-    }
-
     // ── 내부 데이터 클래스 ──────────────────────────────────────────────────
 
     private static class StockInfo {
         final String code, name;
-        final double closePrice, changeRate, marketCap;
-        final long volume;
+        final double changeRate, marketCap;
 
-        StockInfo(String code, String name, double closePrice, double changeRate, long volume, double marketCap) {
+        StockInfo(String code, String name, double changeRate, double marketCap) {
             this.code = code; this.name = name;
-            this.closePrice = closePrice; this.changeRate = changeRate;
-            this.volume = volume; this.marketCap = marketCap;
+            this.changeRate = changeRate; this.marketCap = marketCap;
         }
     }
 

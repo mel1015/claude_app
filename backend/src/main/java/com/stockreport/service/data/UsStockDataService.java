@@ -13,6 +13,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.BufferedReader;
@@ -134,8 +135,8 @@ public class UsStockDataService {
         JsonNode quote = data.path("indicators").path("quote").get(0);
         if (!timestamps.isArray()) return;
 
-        String exchangeName = meta.path("exchangeName").asText("NASDAQ");
-        String name = meta.path("shortName").asText(ticker);
+        String exchangeName = meta.path("exchangeName").stringValue("NASDAQ");
+        String name = meta.path("shortName").stringValue(ticker);
         boolean isNyse = exchangeName.contains("NYSE") || exchangeName.equals("NYQ") || exchangeName.equals("NYSEArca");
         Market market = isNyse ? Market.NYSE : Market.NASDAQ;
 
