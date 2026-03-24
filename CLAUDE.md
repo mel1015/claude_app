@@ -41,10 +41,15 @@ cd frontend && npm run dev
 | 데이터 수집 (미국) | `backend/.../service/data/UsStockDataService.java` |
 | 서버 시작 자동 수집 | `backend/.../scheduler/StartupDataCollector.java` |
 | 수집 상태 관리 | `backend/.../service/DataCollectionStatusService.java` |
+| 수집 완료 이벤트 | `backend/.../scheduler/DataCollectionCompletedEvent.java` |
 | 주식 서비스 | `backend/.../service/StockService.java` |
 | 기술지표 계산 | `backend/.../service/data/IndicatorService.java` |
-| REST API | `backend/.../api/` (StockController, SystemController 등) |
-| 환경변수 | `backend/.env` (GEMINI_API_KEY — 절대 커밋 금지) |
+| 시그널 평가 엔진 | `backend/.../service/signal/SignalEvaluator.java` |
+| 시그널 자동 실행 | `backend/.../scheduler/SignalScheduler.java` |
+| Gemini AI 연동 | `backend/.../service/GeminiService.java` |
+| Slack 알림 | `backend/.../service/SlackNotificationService.java` |
+| REST API | `backend/.../api/` (StockController, SignalController, SystemController 등) |
+| 환경변수 | `backend/.env` (GEMINI_API_KEY, SLACK_WEBHOOK_URL — 절대 커밋 금지) |
 | API 클라이언트 | `frontend/src/lib/api.ts` |
 | 공통 타입 | `frontend/src/lib/types.ts` |
 | SWR 훅 | `frontend/src/hooks/useStocks.ts` |
@@ -68,14 +73,35 @@ cd frontend && npm run dev
   - 날짜 불일치 문제 방지 (종목별 최신 수집 날짜가 다를 수 있음)
 - `getTopVolume()` → ticker 기준 중복 제거 (`putIfAbsent`)
 
+### 시그널 자동 실행 패턴
+- `KrDataScheduler` / `UsDataScheduler` 수집 완료 시 `DataCollectionCompletedEvent` 발행
+- `SignalScheduler`가 `@EventListener`로 수신 → 활성 시그널 전체 자동 실행 (`@Async`)
+- 매칭 결과 있으면 `SlackNotificationService`가 Webhook으로 알림 전송 (URL 미설정 시 skip)
+
+### Virtual Threads
+- `spring.threads.virtual.enabled: true` — Java 25 가상 스레드 활성화 (application.yml)
+
 ## API 엔드포인트 요약
 
 ```
-GET  /api/v1/system/collection-status       # 데이터 수집 상태 확인
-POST /api/v1/system/refresh-cache           # 수동 수집 트리거
-GET  /api/v1/stocks?market=ALL&query=삼성   # 주식 목록/검색
-GET  /api/v1/stocks/{market}/{ticker}       # 주식 상세
-GET  /api/v1/dashboard                      # 대시보드
+GET    /api/v1/dashboard                                              # 대시보드 통합 데이터
+GET    /api/v1/stocks?market=ALL&page=0&size=20&query=삼성            # 주식 목록/검색
+GET    /api/v1/stocks/{market}/{ticker}                               # 주식 상세
+GET    /api/v1/stocks/{market}/{ticker}/history                       # 가격 히스토리
+GET    /api/v1/stocks/top-volume?market=KR                           # 거래량 TOP10
+GET    /api/v1/favorites                                              # 즐겨찾기 목록
+POST   /api/v1/favorites                                              # 즐겨찾기 추가
+DELETE /api/v1/favorites/{id}                                         # 즐겨찾기 삭제
+GET    /api/v1/signals                                                # 시그널 목록
+POST   /api/v1/signals                                                # 시그널 생성
+PUT    /api/v1/signals/{id}                                           # 시그널 수정
+DELETE /api/v1/signals/{id}                                           # 시그널 삭제
+POST   /api/v1/signals/{id}/run                                       # 시그널 즉시 실행
+POST   /api/v1/signals/analyze                                        # Gemini AI 전략 분석
+POST   /api/v1/signals/parse-text                                     # 자연어 → 시그널 조건 변환
+GET    /api/v1/news?market=ALL                                        # 뉴스 목록
+GET    /api/v1/system/collection-status                               # 데이터 수집 상태 확인
+POST   /api/v1/system/refresh-cache?type=KR|US|NEWS&timeframe=DAILY|WEEKLY|MONTHLY  # 수동 수집 트리거
 ```
 
 ## 환경변수
@@ -83,6 +109,9 @@ GET  /api/v1/dashboard                      # 대시보드
 ```bash
 # backend/.env (gitignore 등록됨)
 GEMINI_API_KEY=your_key_here
+
+# Slack 알림 (선택사항 — 미설정 시 알림 없이 정상 동작)
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx/yyy/zzz
 ```
 
 ## 주의사항
