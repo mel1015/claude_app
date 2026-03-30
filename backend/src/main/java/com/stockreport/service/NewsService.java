@@ -14,7 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URL;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -27,6 +27,7 @@ public class NewsService {
 
     private final NewsCacheRepository newsCacheRepository;
 
+    @Transactional(readOnly = true)
     public Page<NewsDto> getNews(String market, String ticker, Pageable pageable) {
         Page<NewsCache> news;
         if (ticker != null && !ticker.isEmpty()) {
@@ -39,6 +40,7 @@ public class NewsService {
         return news.map(this::toDto);
     }
 
+    @Transactional(readOnly = true)
     public List<NewsDto> getLatestNews(int limit) {
         return newsCacheRepository.findAllByOrderByPublishedAtDesc(Pageable.ofSize(limit))
                 .getContent().stream().map(this::toDto).toList();
@@ -72,7 +74,10 @@ public class NewsService {
 
     private void fetchRssFeed(String feedUrl, String market) throws Exception {
         SyndFeedInput input = new SyndFeedInput();
-        SyndFeed feed = input.build(new XmlReader(new URL(feedUrl)));
+        SyndFeed feed;
+        try (var reader = new XmlReader(URI.create(feedUrl).toURL().openStream())) {
+            feed = input.build(reader);
+        }
         List<NewsCache> toSave = new ArrayList<>();
 
         for (SyndEntry entry : feed.getEntries()) {

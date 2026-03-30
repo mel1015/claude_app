@@ -12,7 +12,17 @@ import okhttp3.Response;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.core.functions.CheckedSupplier;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
+
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -53,6 +63,30 @@ public class KrStockDataService {
     private static final Pattern OHLCV_PATTERN = Pattern.compile(
             "data=\"(\\d{8})\\|(\\d+)\\|(\\d+)\\|(\\d+)\\|(\\d+)\\|(\\d+)\"");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    // 외부 API 유량 제어: 초당 10회 제한 (Thread.sleep 대체)
+    private final RateLimiter naverRateLimiter = RateLimiter.of("naverApi",
+            RateLimiterConfig.custom()
+                    .limitForPeriod(10)
+                    .limitRefreshPeriod(Duration.ofSeconds(1))
+                    .timeoutDuration(Duration.ofSeconds(2))
+                    .build());
+
+    // 서킷 브레이커: 10회 슬라이딩 윈도우 중 50% 실패 시 30초 OPEN
+    private final CircuitBreaker naverCircuitBreaker = CircuitBreaker.of("naverApi",
+            CircuitBreakerConfig.custom()
+                    .slidingWindowSize(10)
+                    .failureRateThreshold(50)
+                    .waitDurationInOpenState(Duration.ofSeconds(30))
+                    .permittedNumberOfCallsInHalfOpenState(3)
+                    .build());
+
+    // 재시도: 최대 3회, 지수 백오프 (500ms → 1s → 2s)
+    private final Retry naverRetry = Retry.of("naverApi",
+            RetryConfig.custom()
+                    .maxAttempts(3)
+                    .intervalFunction(IntervalFunction.ofExponentialBackoff(500, 2))
+                    .build());
 
     public void fetchAndSaveKrStocks() {
         fetchAndSaveKrStocksByTimeframe(Timeframe.DAILY, "day", HISTORY_DAYS);
@@ -108,11 +142,7 @@ public class KrStockDataService {
                 boolean fetched = processStock(info, market, today, timeframe, navTimeframe, count);
                 if (fetched) {
                     saved++;
-                    Thread.sleep(80); // rate limiting (API 호출이 있을 때만)
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
             } catch (Exception e) {
                 log.warn("Failed to process {}: {}", info.code, e.getMessage());
             }
@@ -211,19 +241,16 @@ public class KrStockDataService {
                 Matcher pctMatcher = PCT_PATTERN.matcher(rest);
                 double changeRate = pctMatcher.find() ? parseDouble(pctMatcher.group(1)) : 0.0;
 
-                double closePrice = nums.size() > 0 ? parseDouble(nums.get(0)) : 0;
-                // nums.get(1) = 액면가 (스킵)
-                long volume    = nums.size() > 2 ? parseLong(nums.get(2)) : 0;
+                // td.number: [0]=현재가, [1]=액면가, [2]=거래량, [3]=시가총액(억) — 0·2는 OHLCV에서 수집
                 double marketCap = nums.size() > 3 ? parseDouble(nums.get(3)) * 100_000_000L : 0; // 억원→원
 
-                result.add(new StockInfo(code, name, closePrice, changeRate, volume, marketCap));
+                result.add(new StockInfo(code, name, changeRate, marketCap));
             }
 
             if (!foundAny) {
                 log.debug("No more data at page {}", page);
                 break;
             }
-            Thread.sleep(200);
         }
         return result;
     }
@@ -254,17 +281,28 @@ public class KrStockDataService {
     }
 
     private String fetchAsEucKr(String url) throws Exception {
-        Request request = new Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
-                .header("Referer", "https://finance.naver.com")
-                .header("Accept-Language", "ko-KR,ko;q=0.9")
-                .build();
-        try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful() || response.body() == null) {
-                throw new RuntimeException("HTTP " + response.code() + " for " + url);
-            }
-            return new String(response.body().bytes(), EUC_KR);
+        naverRateLimiter.acquirePermission(); // 초당 10회 요청 속도 제한
+        CheckedSupplier<String> decorated = Retry.decorateCheckedSupplier(naverRetry,
+                CircuitBreaker.decorateCheckedSupplier(naverCircuitBreaker, () -> {
+                    Request request = new Request.Builder()
+                            .url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+                            .header("Referer", "https://finance.naver.com")
+                            .header("Accept-Language", "ko-KR,ko;q=0.9")
+                            .build();
+                    try (Response response = httpClient.newCall(request).execute()) {
+                        if (!response.isSuccessful() || response.body() == null) {
+                            throw new RuntimeException("HTTP " + response.code() + " for " + url);
+                        }
+                        return new String(response.body().bytes(), EUC_KR);
+                    }
+                }));
+        try {
+            return decorated.get();
+        } catch (Exception e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
     }
 
@@ -284,22 +322,15 @@ public class KrStockDataService {
         catch (Exception e) { return 0.0; }
     }
 
-    private long parseLong(String v) {
-        try { return Long.parseLong(v.replace(",", "").trim()); }
-        catch (Exception e) { return 0L; }
-    }
-
     // ── 내부 데이터 클래스 ──────────────────────────────────────────────────
 
     private static class StockInfo {
         final String code, name;
-        final double closePrice, changeRate, marketCap;
-        final long volume;
+        final double changeRate, marketCap;
 
-        StockInfo(String code, String name, double closePrice, double changeRate, long volume, double marketCap) {
+        StockInfo(String code, String name, double changeRate, double marketCap) {
             this.code = code; this.name = name;
-            this.closePrice = closePrice; this.changeRate = changeRate;
-            this.volume = volume; this.marketCap = marketCap;
+            this.changeRate = changeRate; this.marketCap = marketCap;
         }
     }
 

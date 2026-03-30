@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ public class StockService {
                 .collect(Collectors.toSet());
     }
 
+    @Transactional(readOnly = true)
     public Page<StockDto> getStocks(String market, String query, Pageable pageable) {
         Set<String> favKeys = loadFavoriteKeys();
         if (query != null && !query.isEmpty()) {
@@ -59,6 +61,7 @@ public class StockService {
         return stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframe(marketEnum, latestDate, Timeframe.DAILY, pageable).map(s -> toDto(s, favKeys));
     }
 
+    @Transactional(readOnly = true)
     public StockDto getStock(String market, String ticker) {
         Set<String> favKeys = loadFavoriteKeys();
         Market marketEnum = Market.valueOf(market.toUpperCase());
@@ -68,6 +71,7 @@ public class StockService {
                 .orElseThrow(() -> new StockNotFoundException("종목을 찾을 수 없습니다: " + ticker));
     }
 
+    @Transactional(readOnly = true)
     public List<StockDto> getStockHistory(String market, String ticker, int days) {
         Market marketEnum = Market.valueOf(market.toUpperCase());
         Pageable pageable = PageRequest.of(0, days, Sort.by("tradeDate").descending());
@@ -77,6 +81,7 @@ public class StockService {
                 .stream().map(s -> toDto(s, favKeys)).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<StockDto> getTopVolume(String market) {
         Pageable top10 = PageRequest.of(0, 10, Sort.by("volume").descending());
         Set<String> favKeys = loadFavoriteKeys();

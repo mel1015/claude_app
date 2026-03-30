@@ -13,7 +13,17 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+
 import org.springframework.transaction.annotation.Transactional;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.core.functions.CheckedSupplier;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -34,6 +44,31 @@ public class UsStockDataService {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .build();
+
+    // 외부 API 유량 제어: 초당 2회 제한 (Yahoo Finance rate limit 대응)
+    private final RateLimiter yahooRateLimiter = RateLimiter.of("yahooApi",
+            RateLimiterConfig.custom()
+                    .limitForPeriod(2)
+                    .limitRefreshPeriod(Duration.ofSeconds(1))
+                    .timeoutDuration(Duration.ofSeconds(3))
+                    .build());
+
+    // 서킷 브레이커: 20회 슬라이딩 윈도우 중 60% 실패 시 30초 OPEN
+    // (배치 수집 특성상 일시적 실패가 많으므로 window를 크게 설정)
+    private final CircuitBreaker yahooCircuitBreaker = CircuitBreaker.of("yahooApi",
+            CircuitBreakerConfig.custom()
+                    .slidingWindowSize(20)
+                    .failureRateThreshold(60)
+                    .waitDurationInOpenState(Duration.ofSeconds(30))
+                    .permittedNumberOfCallsInHalfOpenState(3)
+                    .build());
+
+    // 재시도: 최대 2회, 지수 백오프 (2s → 4s) — 과도한 재시도는 rate limit 악화
+    private final Retry yahooRetry = Retry.of("yahooApi",
+            RetryConfig.custom()
+                    .maxAttempts(2)
+                    .intervalFunction(IntervalFunction.ofExponentialBackoff(2000, 2))
+                    .build());
 
     @Transactional
     public void fetchAndSaveUsStocks() {
@@ -74,11 +109,7 @@ public class UsStockDataService {
                 boolean fetched = fetchStockData(ticker, interval, range, timeframe);
                 if (fetched) {
                     success++;
-                    Thread.sleep(100); // rate limiting (API 호출이 있을 때만)
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
             } catch (Exception e) {
                 log.warn("Failed to fetch data for {}: {}", ticker, e.getMessage());
                 failed++;
@@ -109,18 +140,38 @@ public class UsStockDataService {
 
         String url = "https://query1.finance.yahoo.com/v8/finance/chart/" + ticker
                 + "?range=" + range + "&interval=" + interval;
-        Request request = new Request.Builder().url(url)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .header("Accept", "application/json").build();
-
-        try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful() || response.body() == null) {
-                log.warn("Yahoo Finance request failed for {}: {}", ticker, response.code());
-                return false;
-            }
-            parseAndSaveYahooData(ticker, response.body().string(), timeframe);
+        try {
+            String responseBody = callYahooApi(url);
+            parseAndSaveYahooData(ticker, responseBody, timeframe);
+        } catch (io.github.resilience4j.circuitbreaker.CallNotPermittedException e) {
+            log.warn("[서킷 브레이커 OPEN] Yahoo Finance 요청 차단, {} 스킵", ticker);
+            return false;
         }
         return true;
+    }
+
+    /** RateLimiter → Retry → CircuitBreaker 순으로 Yahoo Finance API 호출 */
+    private String callYahooApi(String url) throws Exception {
+        yahooRateLimiter.acquirePermission(); // 초당 5회 요청 속도 제한
+        CheckedSupplier<String> decorated = Retry.decorateCheckedSupplier(yahooRetry,
+                CircuitBreaker.decorateCheckedSupplier(yahooCircuitBreaker, () -> {
+                    Request request = new Request.Builder().url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                            .header("Accept", "application/json").build();
+                    try (Response response = httpClient.newCall(request).execute()) {
+                        if (!response.isSuccessful() || response.body() == null) {
+                            throw new RuntimeException("Yahoo Finance HTTP " + response.code());
+                        }
+                        return response.body().string();
+                    }
+                }));
+        try {
+            return decorated.get();
+        } catch (Exception e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
     }
 
     private void parseAndSaveYahooData(String ticker, String json, Timeframe timeframe) throws Exception {
@@ -134,8 +185,8 @@ public class UsStockDataService {
         JsonNode quote = data.path("indicators").path("quote").get(0);
         if (!timestamps.isArray()) return;
 
-        String exchangeName = meta.path("exchangeName").asText("NASDAQ");
-        String name = meta.path("shortName").asText(ticker);
+        String exchangeName = meta.path("exchangeName").stringValue("NASDAQ");
+        String name = meta.path("shortName").stringValue(ticker);
         boolean isNyse = exchangeName.contains("NYSE") || exchangeName.equals("NYQ") || exchangeName.equals("NYSEArca");
         Market market = isNyse ? Market.NYSE : Market.NASDAQ;
 

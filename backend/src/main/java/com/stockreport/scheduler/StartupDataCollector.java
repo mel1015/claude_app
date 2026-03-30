@@ -12,6 +12,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
+
 @Component
 @Slf4j
 @RequiredArgsConstructor
@@ -38,24 +40,39 @@ public class StartupDataCollector implements ApplicationRunner {
 
         @Async
         public void collect() {
-            statusService.start("데이터 수집 중...");
+            statusService.start("KR/US 데이터 병렬 수집 중...");
+            statusService.startKr();
+            statusService.startUs();
+
+            // KR + US 병렬 수집 (CompletableFuture.allOf)
+            CompletableFuture<Void> krFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    log.info("[수집 시작] 한국 주식 데이터");
+                    krStockDataService.fetchAndSaveKrStocks();
+                    statusService.completeKr();
+                    log.info("[수집 완료] 한국 주식 데이터");
+                } catch (Exception e) {
+                    log.error("[수집 실패] 한국 주식 데이터: {}", e.getMessage());
+                    statusService.failKr();
+                }
+            });
+
+            CompletableFuture<Void> usFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    log.info("[수집 시작] 미국 주식 데이터");
+                    usStockDataService.fetchAndSaveUsStocks();
+                    statusService.completeUs();
+                    log.info("[수집 완료] 미국 주식 데이터");
+                } catch (Exception e) {
+                    log.error("[수집 실패] 미국 주식 데이터: {}", e.getMessage());
+                    statusService.failUs();
+                }
+            });
 
             try {
-                log.info("[수집 시작] 한국 주식 데이터");
-                statusService.start("한국 주식 데이터 수집 중...");
-                krStockDataService.fetchAndSaveKrStocks();
-                log.info("[수집 완료] 한국 주식 데이터");
+                CompletableFuture.allOf(krFuture, usFuture).join();
             } catch (Exception e) {
-                log.error("[수집 실패] 한국 주식 데이터: {}", e.getMessage());
-            }
-
-            try {
-                log.info("[수집 시작] 미국 주식 데이터");
-                statusService.start("미국 주식 데이터 수집 중...");
-                usStockDataService.fetchAndSaveUsStocks();
-                log.info("[수집 완료] 미국 주식 데이터");
-            } catch (Exception e) {
-                log.error("[수집 실패] 미국 주식 데이터: {}", e.getMessage());
+                log.error("[병렬 수집 오류]: {}", e.getMessage());
             }
 
             try {
