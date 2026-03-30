@@ -483,6 +483,8 @@ OMC 스킬은 섹션 12 참고.
 - MongoDB 프로퍼티: spring.mongodb.uri (Spring Boot 4 변경)
 - compact 요약: 한글로 작성
 - 시그널 자동 실행: DataCollectionCompletedEvent → SignalScheduler
+- KR·US 수집 병렬 실행: CompletableFuture.allOf() (StartupDataCollector)
+- 외부 API 보호: Resilience4j RateLimiter·CircuitBreaker·Retry 적용
 ```
 
 ---
