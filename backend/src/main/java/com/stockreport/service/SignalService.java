@@ -42,10 +42,12 @@ public class SignalService {
     private final GeminiService geminiService;
     private final SlackNotificationService slackNotificationService;
 
+    @Transactional(readOnly = true)
     public List<SignalDto> getSignals() {
         return signalRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toDto).toList();
     }
 
+    @Transactional(readOnly = true)
     public SignalDto getSignal(String id) {
         return signalRepository.findById(id).map(this::toDto)
                 .orElseThrow(() -> new StockNotFoundException("시그널을 찾을 수 없습니다: " + id));
@@ -100,6 +102,7 @@ public class SignalService {
         return results;
     }
 
+    @Transactional(readOnly = true)
     public List<StockDto> getSignalResults(String id) {
         Signal signal = signalRepository.findById(id)
                 .orElseThrow(() -> new StockNotFoundException("시그널을 찾을 수 없습니다: " + id));

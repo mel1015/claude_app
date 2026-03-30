@@ -22,6 +22,7 @@ public class FavoriteService {
     private final FavoriteRepository favoriteRepository;
     private final StockService stockService;
 
+    @Transactional(readOnly = true)
     public List<FavoriteDto> getFavorites() {
         return favoriteRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toDto).toList();
     }
@@ -53,6 +54,7 @@ public class FavoriteService {
                 ticker.toUpperCase(), Market.valueOf(market.toUpperCase()));
     }
 
+    @Transactional(readOnly = true)
     public boolean checkFavorite(String ticker, String market) {
         return favoriteRepository.existsByTickerAndMarket(
                 ticker.toUpperCase(), Market.valueOf(market.toUpperCase()));
