@@ -33,7 +33,9 @@ public class SystemController {
                 "status", statusService.getStatus().name(),
                 "message", statusService.getMessage(),
                 "collecting", statusService.isCollecting(),
-                "lastUpdated", statusService.getLastUpdated()
+                "lastUpdated", statusService.getLastUpdated(),
+                "krStatus", statusService.getKrStatus(),
+                "usStatus", statusService.getUsStatus()
         ));
     }
 

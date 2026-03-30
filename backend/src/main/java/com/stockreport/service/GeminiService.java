@@ -10,6 +10,14 @@ import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.core.functions.CheckedSupplier;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
+
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -31,6 +39,22 @@ public class GeminiService {
 
     private static final String GEMINI_URL =
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    // 서킷 브레이커: 10회 슬라이딩 윈도우 중 50% 실패 시 30초 OPEN
+    private final CircuitBreaker geminiCircuitBreaker = CircuitBreaker.of("geminiApi",
+            CircuitBreakerConfig.custom()
+                    .slidingWindowSize(10)
+                    .failureRateThreshold(50)
+                    .waitDurationInOpenState(Duration.ofSeconds(30))
+                    .permittedNumberOfCallsInHalfOpenState(3)
+                    .build());
+
+    // 재시도: 최대 3회, 지수 백오프 (1s → 2s → 4s)
+    private final Retry geminiRetry = Retry.of("geminiApi",
+            RetryConfig.custom()
+                    .maxAttempts(3)
+                    .intervalFunction(IntervalFunction.ofExponentialBackoff(1000, 2))
+                    .build());
 
     public ParseTextResult parseTextToConditions(String text) {
         if (apiKey == null || apiKey.isBlank()) {
@@ -88,40 +112,25 @@ public class GeminiService {
                 """.formatted(text);
 
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "contents", List.of(Map.of(
-                            "parts", List.of(Map.of("text", prompt))
-                    ))
-            );
+            String responseBody = callGeminiApi(prompt);
+            JsonNode root = objectMapper.readTree(responseBody);
+            String result = root.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").stringValue("");
+            result = result.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
 
-            String jsonBody = objectMapper.writeValueAsString(requestBody);
-            Request request = new Request.Builder()
-                    .url(GEMINI_URL + "?key=" + apiKey)
-                    .post(RequestBody.create(jsonBody, MediaType.get("application/json")))
-                    .build();
+            // timeframe 추출 후 conditions에서 제거
+            JsonNode resultNode = objectMapper.readTree(result);
+            String timeframeStr = resultNode.path("timeframe").stringValue("DAILY");
+            Timeframe timeframe;
+            try { timeframe = Timeframe.valueOf(timeframeStr); }
+            catch (Exception ex) { timeframe = Timeframe.DAILY; }
 
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful() || response.body() == null) return null;
-                String responseBody = response.body().string();
-                JsonNode root = objectMapper.readTree(responseBody);
-                String result = root.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").stringValue("");
-                result = result.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
-
-                // timeframe 추출 후 conditions에서 제거
-                JsonNode resultNode = objectMapper.readTree(result);
-                String timeframeStr = resultNode.path("timeframe").stringValue("DAILY");
-                Timeframe timeframe;
-                try { timeframe = Timeframe.valueOf(timeframeStr); }
-                catch (Exception ex) { timeframe = Timeframe.DAILY; }
-
-                // timeframe 필드를 conditions JSON에서 제거
-                if (resultNode.has("timeframe")) {
-                    ((tools.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
-                }
-                return new ParseTextResult(objectMapper.writeValueAsString(resultNode), timeframe);
+            // timeframe 필드를 conditions JSON에서 제거
+            if (resultNode.has("timeframe")) {
+                ((tools.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
             }
+            return new ParseTextResult(objectMapper.writeValueAsString(resultNode), timeframe);
         } catch (Exception e) {
             log.error("Gemini parse error", e);
             return null;
@@ -137,42 +146,44 @@ public class GeminiService {
         String prompt = buildPrompt(signalName, marketFilter, timeframe, humanReadable, conditionsJson);
 
         try {
-            Map<String, Object> requestBody = Map.of(
-                    "contents", List.of(Map.of(
-                            "parts", List.of(Map.of("text", prompt))
-                    ))
-            );
-
-            String jsonBody = objectMapper.writeValueAsString(requestBody);
-            Request request = new Request.Builder()
-                    .url(GEMINI_URL + "?key=" + apiKey)
-                    .post(RequestBody.create(jsonBody, MediaType.get("application/json")))
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errBody = response.body() != null ? response.body().string() : "(no body)";
-                    log.error("Gemini API error {}: {}", response.code(), errBody);
-                    try {
-                        JsonNode errJson = objectMapper.readTree(errBody);
-                        String msg = errJson.path("error").path("message").stringValue("");
-                        return "Gemini API 오류 (HTTP " + response.code() + "): " + (msg.isBlank() ? errBody : msg);
-                    } catch (Exception ignored) {
-                        return "Gemini API 호출 실패: HTTP " + response.code() + " - " + errBody;
-                    }
-                }
-                if (response.body() == null) {
-                    return "Gemini API 호출 실패: 응답 본문 없음";
-                }
-                String responseBody = response.body().string();
-                JsonNode root = objectMapper.readTree(responseBody);
-                return root.path("candidates").get(0)
-                        .path("content").path("parts").get(0)
-                        .path("text").stringValue("분석 결과를 가져올 수 없습니다.");
-            }
+            String responseBody = callGeminiApi(prompt);
+            JsonNode root = objectMapper.readTree(responseBody);
+            return root.path("candidates").get(0)
+                    .path("content").path("parts").get(0)
+                    .path("text").stringValue("분석 결과를 가져올 수 없습니다.");
         } catch (Exception e) {
             log.error("Gemini API error", e);
             return "Gemini API 오류: " + e.getMessage();
+        }
+    }
+
+    /** CircuitBreaker + Retry로 Gemini API 호출, 응답 본문 반환 */
+    private String callGeminiApi(String prompt) throws Exception {
+        CheckedSupplier<String> decorated = Retry.decorateCheckedSupplier(geminiRetry,
+                CircuitBreaker.decorateCheckedSupplier(geminiCircuitBreaker, () -> {
+                    Map<String, Object> requestBody = Map.of(
+                            "contents", List.of(Map.of(
+                                    "parts", List.of(Map.of("text", prompt))
+                            ))
+                    );
+                    String jsonBody = objectMapper.writeValueAsString(requestBody);
+                    Request request = new Request.Builder()
+                            .url(GEMINI_URL + "?key=" + apiKey)
+                            .post(RequestBody.create(jsonBody, MediaType.get("application/json")))
+                            .build();
+                    try (Response response = httpClient.newCall(request).execute()) {
+                        if (!response.isSuccessful() || response.body() == null) {
+                            throw new RuntimeException("Gemini API HTTP " + response.code());
+                        }
+                        return response.body().string();
+                    }
+                }));
+        try {
+            return decorated.get();
+        } catch (Exception e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
     }
 

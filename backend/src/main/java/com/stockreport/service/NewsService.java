@@ -27,6 +27,7 @@ public class NewsService {
 
     private final NewsCacheRepository newsCacheRepository;
 
+    @Transactional(readOnly = true)
     public Page<NewsDto> getNews(String market, String ticker, Pageable pageable) {
         Page<NewsCache> news;
         if (ticker != null && !ticker.isEmpty()) {
@@ -39,6 +40,7 @@ public class NewsService {
         return news.map(this::toDto);
     }
 
+    @Transactional(readOnly = true)
     public List<NewsDto> getLatestNews(int limit) {
         return newsCacheRepository.findAllByOrderByPublishedAtDesc(Pageable.ofSize(limit))
                 .getContent().stream().map(this::toDto).toList();
