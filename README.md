@@ -13,6 +13,7 @@
 | 지표 | ta4j (RSI, MACD, 이동평균 MA5/10/20/60) |
 | AI 분석 | Gemini 2.5 Flash (시그널 전략 검토 / 자연어 조건 생성) |
 | 알림 | Slack Incoming Webhook (시그널 매칭 알림) |
+| 안정성 | Resilience4j (RateLimiter · CircuitBreaker · Retry) |
 
 ## 사전 요구사항
 
@@ -69,10 +70,10 @@ GEMINI_API_KEY=your_key ./gradlew bootRun
 ```bash
 # 수집 상태 확인
 curl http://localhost:8080/api/v1/system/collection-status
-# {"status":"COLLECTING","collecting":true,"message":"한국 주식 데이터 수집 중..."}
+# {"status":"COLLECTING","collecting":true,"message":"데이터 수집 중...","krStatus":"COLLECTING","usStatus":"IDLE"}
 ```
 
-최초 수집(DB가 비어있는 경우) 시 일봉 KR 약 10분, US 약 15분이 소요됩니다. 이후 재시작 시에는 당일 데이터가 이미 있으면 즉시 skip됩니다.
+최초 수집(DB가 비어있는 경우) 시 KR·US 수집이 **병렬**로 실행되며 약 10~15분이 소요됩니다. 이후 재시작 시에는 당일 데이터가 이미 있으면 즉시 skip됩니다.
 
 주봉/월봉 데이터는 수동으로 수집합니다.
 
