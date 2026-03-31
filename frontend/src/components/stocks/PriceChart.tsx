@@ -21,6 +21,59 @@ interface PriceChartProps {
   referenceDates?: string[];
 }
 
+const CandlestickBar = (props: any) => {
+  const { x, y, width, height, payload } = props;
+  if (!payload) return null;
+
+  const { openPrice, closePrice, highPrice, lowPrice } = payload;
+  const range = highPrice - lowPrice;
+  if (range === 0) return null;
+
+  const isUp = closePrice >= openPrice;
+  const color = isUp ? "#ef4444" : "#3b82f6";
+
+  // y = pixel for highPrice, y+height = pixel for lowPrice (recharts range bar 기준)
+  const yOpen = y + height * (highPrice - openPrice) / range;
+  const yClose = y + height * (highPrice - closePrice) / range;
+
+  const bodyTop = Math.min(yOpen, yClose);
+  const bodyHeight = Math.max(Math.abs(yClose - yOpen), 1);
+  const centerX = x + width / 2;
+  const bodyWidth = Math.max(width - 2, 2);
+
+  return (
+    <g>
+      <line x1={centerX} y1={y} x2={centerX} y2={y + height} stroke={color} strokeWidth={1} />
+      <rect x={x + 1} y={bodyTop} width={bodyWidth} height={bodyHeight} fill={color} stroke={color} />
+    </g>
+  );
+};
+
+const CandlestickTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  const isUp = d.closePrice >= d.openPrice;
+  const priceColor = isUp ? "#ef4444" : "#3b82f6";
+  return (
+    <div className="bg-background border border-border rounded p-2 text-xs space-y-1 shadow-md">
+      <div className="font-medium">{formatDate(label)}</div>
+      <div>시가: {d.openPrice?.toFixed(2)}</div>
+      <div style={{ color: "#ef4444" }}>고가: {d.highPrice?.toFixed(2)}</div>
+      <div style={{ color: "#3b82f6" }}>저가: {d.lowPrice?.toFixed(2)}</div>
+      <div style={{ color: priceColor }}>종가: {d.closePrice?.toFixed(2)}</div>
+      {d.changeRate != null && (
+        <div style={{ color: priceColor }}>
+          등락률: {d.changeRate >= 0 ? "+" : ""}{d.changeRate?.toFixed(2)}%
+        </div>
+      )}
+      {d.ma5 != null && <div style={{ color: "#f59e0b" }}>MA5: {d.ma5?.toFixed(2)}</div>}
+      {d.ma20 != null && <div style={{ color: "#10b981" }}>MA20: {d.ma20?.toFixed(2)}</div>}
+      {d.ma60 != null && <div style={{ color: "#8b5cf6" }}>MA60: {d.ma60?.toFixed(2)}</div>}
+    </div>
+  );
+};
+
 export function PriceChart({ data, market, referenceDates }: PriceChartProps) {
   if (!data || data.length === 0) {
     return <div className="text-center py-12 text-muted-foreground">차트 데이터가 없습니다</div>;
@@ -38,7 +91,12 @@ export function PriceChart({ data, market, referenceDates }: PriceChartProps) {
 
   const chartData = sorted.map((d, i) => ({
     date: d.tradeDate,
-    close: d.closePrice,
+    openPrice: d.openPrice,
+    highPrice: d.highPrice,
+    lowPrice: d.lowPrice,
+    closePrice: d.closePrice,
+    candle: [d.lowPrice, d.highPrice] as [number, number],
+    changeRate: d.changeRate,
     volume: d.volume,
     ma5: d.ma5 ?? calcMA(closes, 5, i),
     ma20: d.ma20 ?? calcMA(closes, 20, i),
@@ -59,13 +117,11 @@ export function PriceChart({ data, market, referenceDates }: PriceChartProps) {
             orientation="right"
             tick={{ fontSize: 11 }}
             tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v)}
+            domain={["auto", "auto"]}
           />
-          <Tooltip
-            formatter={(value: number, name: string) => [value?.toFixed(2), name]}
-            labelFormatter={(label) => formatDate(label)}
-          />
+          <Tooltip content={<CandlestickTooltip />} />
           <Legend />
-          <Line type="monotone" dataKey="close" stroke="#3b82f6" dot={false} strokeWidth={2} name="종가" />
+          <Bar dataKey="candle" name="캔들" shape={<CandlestickBar />} isAnimationActive={false} legendType="none" />
           <Line type="monotone" dataKey="ma5" stroke="#f59e0b" dot={false} strokeWidth={1} name="MA5" />
           <Line type="monotone" dataKey="ma20" stroke="#10b981" dot={false} strokeWidth={1} name="MA20" />
           <Line type="monotone" dataKey="ma60" stroke="#8b5cf6" dot={false} strokeWidth={1} name="MA60" />
