@@ -21,5 +21,6 @@ public class SignalDto {
     private boolean active;
     private LocalDateTime lastRunAt;
     private List<StockDto> lastResults;
+    private SignalAnalysisResult lastAnalysis;
     private LocalDateTime createdAt;
 }

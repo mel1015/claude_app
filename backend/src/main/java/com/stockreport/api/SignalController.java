@@ -60,6 +60,14 @@ public class SignalController {
         return ResponseEntity.ok(Map.of("data", signalService.getSignalResults(id), "meta", Map.of("timestamp", Instant.now())));
     }
 
+    @GetMapping("/{id}/analysis")
+    public ResponseEntity<?> getSignalAnalysis(@PathVariable String id) {
+        var analysis = signalService.getSignalAnalysis(id);
+        return ResponseEntity.ok(Map.of(
+                "data", analysis != null ? analysis : Map.of(),
+                "meta", Map.of("timestamp", Instant.now())));
+    }
+
     @PostMapping("/validate")
     public ResponseEntity<?> validateConditions(@RequestBody Map<String, String> body) {
         signalService.validateConditions(body.get("conditions"));

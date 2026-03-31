@@ -12,6 +12,7 @@ import com.stockreport.domain.stock.Timeframe;
 import com.stockreport.dto.response.ParseTextResult;
 import com.stockreport.dto.request.SignalCreateRequest;
 import com.stockreport.dto.request.SignalUpdateRequest;
+import com.stockreport.dto.response.SignalAnalysisResult;
 import com.stockreport.dto.response.SignalDto;
 import com.stockreport.dto.response.StockDto;
 import com.stockreport.exception.StockNotFoundException;
@@ -93,12 +94,30 @@ public class SignalService {
         signal.setLastRunAt(LocalDateTime.now());
         try { signal.setLastResult(objectMapper.writeValueAsString(results)); }
         catch (JacksonException e) { log.warn("Failed to serialize results"); }
-        signalRepository.save(signal);
+
+        String analysisJson = null;
         if (!results.isEmpty()) {
             Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
+
+            // AI 분석 — Gemini 실패 시 null → 기본 알림만 발송
+            try {
+                analysisJson = geminiService.analyzeSignalResults(
+                        signal.getName(), signal.getMarketFilter(),
+                        timeframe.name(), signal.getConditions(), results);
+                if (analysisJson != null) {
+                    objectMapper.readTree(analysisJson); // JSON 유효성 검증
+                    signal.setLastAnalysis(analysisJson);
+                }
+            } catch (Exception e) {
+                log.warn("[시그널 AI 분석] '{}' 분석 실패, 기본 알림만 발송: {}", signal.getName(), e.getMessage());
+                analysisJson = null;
+            }
+
             slackNotificationService.sendSignalAlert(
-                    signal.getName(), signal.getMarketFilter(), timeframe.name(), results);
+                    signal.getName(), signal.getMarketFilter(), timeframe.name(), results, analysisJson);
         }
+
+        signalRepository.save(signal);
         return results;
     }
 
@@ -111,6 +130,13 @@ public class SignalService {
             return objectMapper.readValue(signal.getLastResult(),
                     objectMapper.getTypeFactory().constructCollectionType(List.class, StockDto.class));
         } catch (JacksonException e) { return List.of(); }
+    }
+
+    @Transactional(readOnly = true)
+    public SignalAnalysisResult getSignalAnalysis(String id) {
+        Signal signal = signalRepository.findById(id)
+                .orElseThrow(() -> new StockNotFoundException("시그널을 찾을 수 없습니다: " + id));
+        return parseAnalysis(signal.getLastAnalysis());
     }
 
     public String analyzeWithGemini(String name, String marketFilter, String timeframe, String conditions) {
@@ -158,7 +184,7 @@ public class SignalService {
                 Map<String, Map<String, Double>> prevStocksMap = prevDate != null
                         ? stockDailyCacheRepository.findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(
                                 market, prevDate, timeframe, PageRequest.of(0, Integer.MAX_VALUE))
-                                .stream().collect(Collectors.toMap(StockDailyCache::getTicker, signalEvaluator::stockToMap))
+                                .stream().collect(Collectors.toMap(StockDailyCache::getTicker, signalEvaluator::stockToMap, (a, b) -> a))
                         : Map.of();
 
                 List<StockDailyCache> stocks = stockDailyCacheRepository
@@ -202,7 +228,19 @@ public class SignalService {
                 .id(signal.getId()).name(signal.getName()).marketFilter(signal.getMarketFilter())
                 .timeframe(signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY)
                 .conditions(conditionsNode).active(signal.isActive())
-                .lastRunAt(signal.getLastRunAt()).lastResults(lastResults).createdAt(signal.getCreatedAt())
+                .lastRunAt(signal.getLastRunAt()).lastResults(lastResults)
+                .lastAnalysis(parseAnalysis(signal.getLastAnalysis()))
+                .createdAt(signal.getCreatedAt())
                 .build();
+    }
+
+    private SignalAnalysisResult parseAnalysis(String json) {
+        if (json == null) return null;
+        try {
+            return objectMapper.readValue(json, SignalAnalysisResult.class);
+        } catch (Exception e) {
+            log.warn("Failed to parse signal analysis JSON");
+            return null;
+        }
     }
 }

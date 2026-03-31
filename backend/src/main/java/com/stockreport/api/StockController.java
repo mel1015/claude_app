@@ -1,6 +1,8 @@
 package com.stockreport.api;
 
+import com.stockreport.dto.response.StockAnalysisReport;
 import com.stockreport.dto.response.StockDto;
+import com.stockreport.service.GeminiService;
 import com.stockreport.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -20,6 +22,8 @@ import java.util.Map;
 public class StockController {
 
     private final StockService stockService;
+    private final GeminiService geminiService;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
 
     @GetMapping
     public ResponseEntity<?> getStocks(
@@ -56,5 +60,29 @@ public class StockController {
         return ResponseEntity.ok(Map.of(
                 "data", stockService.getTopVolume(market),
                 "meta", Map.of("timestamp", Instant.now())));
+    }
+
+    @PostMapping("/{market}/{ticker}/analyze")
+    public ResponseEntity<?> analyzeStock(@PathVariable String market, @PathVariable String ticker) {
+        StockDto stock = stockService.getStock(market, ticker);
+        List<StockDto> history = stockService.getStockHistory(market, ticker, 30);
+
+        String analysisJson = geminiService.analyzeStock(stock, history);
+        if (analysisJson == null) {
+            return ResponseEntity.ok(Map.of(
+                    "data", Map.of(),
+                    "meta", Map.of("timestamp", Instant.now(), "error", "AI 분석을 수행할 수 없습니다")));
+        }
+
+        try {
+            StockAnalysisReport report = objectMapper.readValue(analysisJson, StockAnalysisReport.class);
+            return ResponseEntity.ok(Map.of(
+                    "data", report,
+                    "meta", Map.of("timestamp", Instant.now())));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                    "data", Map.of(),
+                    "meta", Map.of("timestamp", Instant.now(), "error", "분석 결과 파싱 실패")));
+        }
     }
 }

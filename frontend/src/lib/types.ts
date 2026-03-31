@@ -32,6 +32,44 @@ export interface FavoriteDto {
 
 export type Timeframe = "DAILY" | "WEEKLY" | "MONTHLY";
 
+export interface TargetPrice {
+  low: number;
+  high: number;
+}
+
+export interface StockAnalysis {
+  ticker: string;
+  name: string;
+  recommendation: string;
+  targetPrice?: TargetPrice;
+  stopLoss?: number;
+  reasoning: string;
+}
+
+export interface StrategyAssessment {
+  validity: string;
+  score: number;
+  reasoning: string;
+}
+
+export interface StockAnalysisReport {
+  recommendation: string;
+  score: number;
+  targetPrice?: TargetPrice;
+  stopLoss?: number;
+  technicalAnalysis: string;
+  fundamentalNote: string;
+  globalContext: string;
+  riskFactors: string;
+  summary: string;
+}
+
+export interface SignalAnalysisResult {
+  strategyAssessment?: StrategyAssessment;
+  stockAnalyses?: StockAnalysis[];
+  marketContext?: string;
+}
+
 export interface SignalDto {
   id: string;
   name: string;
@@ -41,6 +79,7 @@ export interface SignalDto {
   active: boolean;
   lastRunAt?: string;
   lastResults?: StockDto[];
+  lastAnalysis?: SignalAnalysisResult;
   createdAt: string;
 }
 
