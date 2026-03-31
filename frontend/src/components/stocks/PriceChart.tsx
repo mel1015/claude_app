@@ -21,8 +21,21 @@ interface PriceChartProps {
   referenceDates?: string[];
 }
 
-const CandlestickBar = (props: any) => {
-  const { x, y, width, height, payload } = props;
+interface CandlestickBarProps {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: {
+    openPrice: number;
+    closePrice: number;
+    highPrice: number;
+    lowPrice: number;
+  };
+}
+
+const CandlestickBar = (props: CandlestickBarProps) => {
+  const { x = 0, y = 0, width = 0, height = 0, payload } = props;
   if (!payload) return null;
 
   const { openPrice, closePrice, highPrice, lowPrice } = payload;
@@ -49,11 +62,30 @@ const CandlestickBar = (props: any) => {
   );
 };
 
-const CandlestickTooltip = ({ active, payload, label }: any) => {
+interface ChartDataPoint {
+  date: string;
+  openPrice: number | null | undefined;
+  closePrice: number | null | undefined;
+  highPrice: number | null | undefined;
+  lowPrice: number | null | undefined;
+  changeRate: number | null | undefined;
+  volume: number | null | undefined;
+  ma5: number | null;
+  ma20: number | null;
+  ma60: number | null;
+}
+
+interface CandlestickTooltipProps {
+  active?: boolean;
+  payload?: { payload: ChartDataPoint }[];
+  label?: string;
+}
+
+const CandlestickTooltip = ({ active, payload, label }: CandlestickTooltipProps) => {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   if (!d) return null;
-  const isUp = d.closePrice >= d.openPrice;
+  const isUp = (d.closePrice ?? 0) >= (d.openPrice ?? 0);
   const priceColor = isUp ? "#ef4444" : "#3b82f6";
   return (
     <div className="bg-background border border-border rounded p-2 text-xs space-y-1 shadow-md">
