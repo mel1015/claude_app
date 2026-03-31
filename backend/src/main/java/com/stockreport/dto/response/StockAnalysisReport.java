@@ -18,12 +18,4 @@ public class StockAnalysisReport {
     private String riskFactors;
     private String summary;
 
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TargetPrice {
-        private Double low;
-        private Double high;
-    }
 }

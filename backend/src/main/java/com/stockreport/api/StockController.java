@@ -23,7 +23,6 @@ public class StockController {
 
     private final StockService stockService;
     private final GeminiService geminiService;
-    private final tools.jackson.databind.ObjectMapper objectMapper;
 
     @GetMapping
     public ResponseEntity<?> getStocks(
@@ -67,22 +66,15 @@ public class StockController {
         StockDto stock = stockService.getStock(market, ticker);
         List<StockDto> history = stockService.getStockHistory(market, ticker, 30);
 
-        String analysisJson = geminiService.analyzeStock(stock, history);
-        if (analysisJson == null) {
+        StockAnalysisReport report = geminiService.analyzeStock(stock, history);
+        if (report == null) {
             return ResponseEntity.ok(Map.of(
                     "data", Map.of(),
                     "meta", Map.of("timestamp", Instant.now(), "error", "AI 분석을 수행할 수 없습니다")));
         }
 
-        try {
-            StockAnalysisReport report = objectMapper.readValue(analysisJson, StockAnalysisReport.class);
-            return ResponseEntity.ok(Map.of(
-                    "data", report,
-                    "meta", Map.of("timestamp", Instant.now())));
-        } catch (Exception e) {
-            return ResponseEntity.ok(Map.of(
-                    "data", Map.of(),
-                    "meta", Map.of("timestamp", Instant.now(), "error", "분석 결과 파싱 실패")));
-        }
+        return ResponseEntity.ok(Map.of(
+                "data", report,
+                "meta", Map.of("timestamp", Instant.now())));
     }
 }
