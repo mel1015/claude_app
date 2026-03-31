@@ -30,6 +30,7 @@ import java.io.InputStreamReader;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import org.springframework.data.domain.PageRequest;
 
 @Service
 @Slf4j
@@ -212,20 +213,31 @@ public class UsStockDataService {
         }
 
         LocalDateTime now = LocalDateTime.now();
-        for (int i = 0; i < entries.size(); i++) {
-            StockDailyCache stock = entries.get(i);
+        for (StockDailyCache stock : entries) {
             Optional<StockDailyCache> existing = stockDailyCacheRepository
                     .findByTickerAndMarketAndTradeDateAndTimeframe(stock.getTicker(), market, stock.getTradeDate(), timeframe);
             if (existing.isPresent()) {
                 copyFields(stock, existing.get());
                 existing.get().setCollectedAt(now);
-                if (i == entries.size() - 1) indicatorService.calculateAndSetIndicators(entries, existing.get());
                 stockDailyCacheRepository.save(existing.get());
             } else {
                 stock.setCollectedAt(now);
-                if (i == entries.size() - 1) indicatorService.calculateAndSetIndicators(entries, stock);
                 stockDailyCacheRepository.save(stock);
             }
+        }
+
+        // DB에서 충분한 히스토리를 조회하여 기술지표 계산 (KrStockDataService와 동일한 방식)
+        LocalDate latestDate = entries.stream().map(StockDailyCache::getTradeDate).max(LocalDate::compareTo).orElse(null);
+        if (latestDate != null) {
+            stockDailyCacheRepository
+                    .findByTickerAndMarketAndTradeDateAndTimeframe(ticker, market, latestDate, timeframe)
+                    .ifPresent(latest -> {
+                        List<StockDailyCache> hist = stockDailyCacheRepository
+                                .findByTickerAndMarketAndTimeframeOrderByTradeDateDesc(ticker, market, timeframe,
+                                        PageRequest.of(0, 90));
+                        indicatorService.calculateAndSetIndicators(hist, latest);
+                        stockDailyCacheRepository.save(latest);
+                    });
         }
     }
 
