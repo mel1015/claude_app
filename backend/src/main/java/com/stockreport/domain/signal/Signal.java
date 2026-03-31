@@ -35,6 +35,8 @@ public class Signal {
 
     private String lastResult;
 
+    private String lastAnalysis;
+
     @CreatedDate
     private LocalDateTime createdAt;
 }

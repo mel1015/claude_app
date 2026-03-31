@@ -7,10 +7,10 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Bell, Plus, Play, Trash2, ChevronDown, ChevronUp, Pencil, X } from "lucide-react";
+import { Bell, Plus, Play, Trash2, ChevronDown, ChevronUp, Pencil, X, Brain, Target, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-import type { SignalDto, StockDto, SignalCondition, SignalLeaf, SignalGroup } from "@/lib/types";
+import type { SignalDto, StockDto, SignalCondition, SignalLeaf, SignalGroup, SignalAnalysisResult } from "@/lib/types";
 import { StockTable } from "@/components/stocks/StockTable";
 import { SignalBuilder } from "@/components/signals/SignalBuilder";
 import { SignalMiniChart } from "@/components/signals/SignalMiniChart";
@@ -76,6 +76,75 @@ function ConditionSummary({ conditions }: { conditions: SignalCondition }) {
           <ConditionNode node={node} />
         </span>
       ))}
+    </div>
+  );
+}
+
+function RecommendationBadge({ rec }: { rec: string }) {
+  if (rec === "매수") return <Badge variant="success" className="gap-1"><TrendingUp className="h-3 w-3" />{rec}</Badge>;
+  if (rec === "매도") return <Badge variant="destructive" className="gap-1"><TrendingDown className="h-3 w-3" />{rec}</Badge>;
+  return <Badge variant="secondary" className="gap-1"><Minus className="h-3 w-3" />{rec}</Badge>;
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const color = score >= 7 ? "text-green-500" : score >= 4 ? "text-yellow-500" : "text-red-500";
+  return <span className={`font-bold ${color}`}>{score}/10</span>;
+}
+
+function AnalysisSection({ analysis }: { analysis: SignalAnalysisResult }) {
+  return (
+    <div className="space-y-4 border-t pt-4 mt-4">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <Brain className="h-4 w-4 text-purple-500" />
+        AI 분석 리포트
+      </div>
+
+      {analysis.strategyAssessment && (
+        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Target className="h-4 w-4" />
+            전략 평가: {analysis.strategyAssessment.validity} <ScoreBadge score={analysis.strategyAssessment.score} />
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {analysis.strategyAssessment.reasoning}
+          </p>
+        </div>
+      )}
+
+      {analysis.marketContext && (
+        <div className="bg-muted/50 rounded-lg p-4">
+          <div className="text-sm font-medium mb-1">시장 상황</div>
+          <p className="text-sm text-muted-foreground leading-relaxed">{analysis.marketContext}</p>
+        </div>
+      )}
+
+      {analysis.stockAnalyses && analysis.stockAnalyses.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium">종목별 AI 의견</div>
+          <div className="grid gap-2">
+            {analysis.stockAnalyses.map((sa) => (
+              <div key={sa.ticker} className="bg-muted/50 rounded-lg p-3 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{sa.name}</span>
+                    <span className="text-xs text-muted-foreground">({sa.ticker})</span>
+                    <RecommendationBadge rec={sa.recommendation} />
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {sa.targetPrice && (
+                      <span>목표: {sa.targetPrice.low?.toLocaleString()}~{sa.targetPrice.high?.toLocaleString()}</span>
+                    )}
+                    {sa.stopLoss != null && (
+                      <span className="text-red-500">손절: {sa.stopLoss.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{sa.reasoning}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -258,6 +327,9 @@ export default function SignalsPage() {
                           </div>
                         )}
                       </div>
+                    )}
+                    {signal.lastAnalysis && (
+                      <AnalysisSection analysis={signal.lastAnalysis} />
                     )}
                   </div>
                 </CardContent>
