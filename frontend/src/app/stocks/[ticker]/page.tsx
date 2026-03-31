@@ -51,10 +51,10 @@ export default function StockDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">{stock.ticker}</h1>
+            <h1 className="text-3xl font-bold">{stock.name}</h1>
             <Badge variant="secondary">{stock.market}</Badge>
           </div>
-          <div className="text-muted-foreground">{stock.name}</div>
+          <div className="text-muted-foreground">{stock.ticker}</div>
         </div>
         <button
           onClick={handleToggleFavorite}
