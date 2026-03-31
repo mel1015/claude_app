@@ -2,8 +2,10 @@ package com.stockreport.service;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.stockreport.domain.stock.Timeframe;
 import com.stockreport.dto.response.ParseTextResult;
+import com.stockreport.dto.response.StockAnalysisReport;
 import com.stockreport.dto.response.StockDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -129,7 +131,7 @@ public class GeminiService {
 
             // timeframe 필드를 conditions JSON에서 제거
             if (resultNode.has("timeframe")) {
-                ((tools.jackson.databind.node.ObjectNode) resultNode).remove("timeframe");
+                ((ObjectNode) resultNode).remove("timeframe");
             }
             return new ParseTextResult(objectMapper.writeValueAsString(resultNode), timeframe);
         } catch (Exception e) {
@@ -168,18 +170,21 @@ public class GeminiService {
 
         try {
             String responseBody = callGeminiApi(prompt);
-            JsonNode root = objectMapper.readTree(responseBody);
-            String text = root.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").stringValue("");
-            String cleaned = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
-            // JSON 유효성 사전 검증 — 파싱 불가 시 null 반환
-            objectMapper.readTree(cleaned);
-            return cleaned;
+            return extractJsonFromGeminiResponse(responseBody);
         } catch (Exception e) {
             log.error("[Gemini] Signal results analysis error: {}", e.getMessage());
             return null;
         }
+    }
+
+    private String extractJsonFromGeminiResponse(String responseBody) throws Exception {
+        JsonNode root = objectMapper.readTree(responseBody);
+        String text = root.path("candidates").get(0)
+                .path("content").path("parts").get(0)
+                .path("text").stringValue("");
+        String cleaned = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+        objectMapper.readTree(cleaned); // JSON 유효성 검증
+        return cleaned;
     }
 
     private String buildSignalResultsPrompt(String signalName, String marketFilter,
@@ -381,7 +386,7 @@ public class GeminiService {
         }
     }
 
-    public String analyzeStock(StockDto stock, List<StockDto> history) {
+    public StockAnalysisReport analyzeStock(StockDto stock, List<StockDto> history) {
         if (apiKey == null || apiKey.isBlank()) {
             return null;
         }
@@ -389,13 +394,8 @@ public class GeminiService {
         String prompt = buildStockAnalysisPrompt(stock, history);
         try {
             String responseBody = callGeminiApi(prompt);
-            JsonNode root = objectMapper.readTree(responseBody);
-            String text = root.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").stringValue("");
-            String cleaned = text.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
-            objectMapper.readTree(cleaned); // JSON validity check
-            return cleaned;
+            String cleaned = extractJsonFromGeminiResponse(responseBody);
+            return objectMapper.readValue(cleaned, StockAnalysisReport.class);
         } catch (Exception e) {
             log.error("[Gemini] Stock analysis error for {}: {}", stock.getTicker(), e.getMessage());
             return null;

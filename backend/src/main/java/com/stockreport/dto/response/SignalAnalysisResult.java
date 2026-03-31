@@ -40,13 +40,4 @@ public class SignalAnalysisResult {
         private String reasoning;
     }
 
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    @Builder
-    public static class TargetPrice {
-        private Double low;
-        private Double high;
-    }
 }
