@@ -7,34 +7,7 @@ import { z } from "zod";
 import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { SignalCondition, SignalLeaf, SignalGroup, Timeframe } from "@/lib/types";
-
-const FIELDS = [
-  { value: "close_price", label: "종가" },
-  { value: "open_price", label: "시가" },
-  { value: "high_price", label: "고가" },
-  { value: "low_price", label: "저가" },
-  { value: "volume", label: "거래량" },
-  { value: "change_rate", label: "등락률(%)" },
-  { value: "ma5", label: "MA5" },
-  { value: "ma10", label: "MA10" },
-  { value: "ma20", label: "MA20" },
-  { value: "ma60", label: "MA60" },
-  { value: "rsi14", label: "RSI(14)" },
-  { value: "macd", label: "MACD" },
-  { value: "macd_signal", label: "MACD Signal" },
-  { value: "macd_hist", label: "MACD Hist" },
-];
-
-const OPERATORS = [
-  { value: ">", label: ">" },
-  { value: ">=", label: ">=" },
-  { value: "<", label: "<" },
-  { value: "<=", label: "<=" },
-  { value: "==", label: "==" },
-  { value: "!=", label: "!=" },
-  { value: "crossover", label: "상향돌파 ↑" },
-  { value: "crossunder", label: "하향이탈 ↓" },
-];
+import { FIELDS, OPERATORS } from "@/lib/signalLabels";
 
 const schema = z.object({
   name: z.string().min(1, "이름을 입력하세요"),
