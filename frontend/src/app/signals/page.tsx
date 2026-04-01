@@ -11,26 +11,10 @@ import { Bell, Plus, Play, Trash2, ChevronDown, ChevronUp, Pencil, X, Brain, Tar
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import type { SignalDto, StockDto, SignalCondition, SignalLeaf, SignalGroup, SignalAnalysisResult } from "@/lib/types";
+import { FIELD_LABELS, OP_LABELS, isLeaf } from "@/lib/signalLabels";
+import { formatNumber } from "@/lib/utils";
 import { StockTable } from "@/components/stocks/StockTable";
 import { SignalBuilder } from "@/components/signals/SignalBuilder";
-import { SignalMiniChart } from "@/components/signals/SignalMiniChart";
-import { SignalDetailChart } from "@/components/signals/SignalDetailChart";
-
-const FIELD_LABELS: Record<string, string> = {
-  close_price: "종가", open_price: "시가", high_price: "고가", low_price: "저가",
-  volume: "거래량", change_rate: "등락률(%)",
-  ma5: "MA5", ma10: "MA10", ma20: "MA20", ma60: "MA60",
-  rsi14: "RSI(14)", macd: "MACD", macd_signal: "MACD Signal", macd_hist: "MACD Hist",
-};
-
-const OP_LABELS: Record<string, string> = {
-  ">": ">", ">=": "≥", "<": "<", "<=": "≤", "==": "=", "!=": "≠",
-  crossover: "상향돌파↑", crossunder: "하향이탈↓",
-};
-
-function isLeaf(node: SignalLeaf | SignalGroup): node is SignalLeaf {
-  return "field" in node;
-}
 
 function ConditionNode({ node, depth = 0 }: { node: SignalLeaf | SignalGroup; depth?: number }) {
   if (isLeaf(node)) {
@@ -132,10 +116,10 @@ function AnalysisSection({ analysis }: { analysis: SignalAnalysisResult }) {
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {sa.targetPrice && (
-                      <span>목표: {sa.targetPrice.low?.toLocaleString()}~{sa.targetPrice.high?.toLocaleString()}</span>
+                      <span>목표: {formatNumber(sa.targetPrice.low, 0)}~{formatNumber(sa.targetPrice.high, 0)}</span>
                     )}
                     {sa.stopLoss != null && (
-                      <span className="text-red-500">손절: {sa.stopLoss.toLocaleString()}</span>
+                      <span className="text-red-500">손절: {formatNumber(sa.stopLoss, 0)}</span>
                     )}
                   </div>
                 </div>
@@ -151,25 +135,20 @@ function AnalysisSection({ analysis }: { analysis: SignalAnalysisResult }) {
 
 export default function SignalsPage() {
   const { signals, error, isLoading, mutate } = useSignals();
-  const [runningId, setRunningId] = useState<string | null>(null);
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, StockDto[]>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editingSignal, setEditingSignal] = useState<SignalDto | null>(null);
-  const [selectedStock, setSelectedStock] = useState<StockDto | null>(null);
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (selectedStock) { setSelectedStock(null); return; }
-        if (editingSignal) setEditingSignal(null);
-      }
+      if (e.key === "Escape") setEditingSignal(null);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [selectedStock, editingSignal]);
+  }, []);
 
   const handleRun = async (id: string) => {
-    setRunningId(id);
+    setRunningIds((prev) => new Set(prev).add(id));
     try {
       const res = await api.post<{ data: StockDto[] }>(`/api/v1/signals/${id}/run`);
       setResults((prev) => ({ ...prev, [id]: res.data }));
@@ -178,7 +157,7 @@ export default function SignalsPage() {
     } catch (err) {
       console.error("Run failed:", err);
     } finally {
-      setRunningId(null);
+      setRunningIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
     }
   };
 
@@ -186,6 +165,7 @@ export default function SignalsPage() {
     if (!confirm("시그널을 삭제하시겠습니까?")) return;
     try {
       await api.delete(`/api/v1/signals/${id}`);
+      setResults((prev) => { const next = { ...prev }; delete next[id]; return next; });
       mutate();
     } catch (err) {
       console.error("Delete failed:", err);
@@ -255,11 +235,11 @@ export default function SignalsPage() {
                     </button>
                     <button
                       onClick={() => handleRun(signal.id)}
-                      disabled={runningId === signal.id}
+                      disabled={runningIds.has(signal.id)}
                       className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                     >
                       <Play className="h-3 w-3" />
-                      {runningId === signal.id ? "실행 중..." : "실행"}
+                      {runningIds.has(signal.id) ? "실행 중..." : "실행"}
                     </button>
                     <button
                       onClick={() => setEditingSignal(signal)}
@@ -312,14 +292,6 @@ export default function SignalsPage() {
                           <StockTable
                             stocks={results[signal.id]}
                             showFavoriteButton={false}
-                            renderExtraColumn={(stock) => (
-                              <SignalMiniChart
-                                market={stock.market}
-                                ticker={stock.ticker}
-                                tradeDate={stock.tradeDate}
-                                onChartClick={() => setSelectedStock(stock)}
-                              />
-                            )}
                           />
                         ) : (
                           <div className="text-sm text-muted-foreground text-center py-4">
@@ -339,10 +311,6 @@ export default function SignalsPage() {
         </div>
       )}
 
-      {/* 차트 상세 모달 */}
-      <SignalDetailChart stock={selectedStock} onClose={() => setSelectedStock(null)} />
-
-      {/* 수정 모달 */}
       {editingSignal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
