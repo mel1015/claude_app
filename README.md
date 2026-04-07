@@ -107,7 +107,7 @@ npm run dev
 |------|------|------|
 | 대시보드 | `/` | 시장 요약, 즐겨찾기, 거래량TOP, 뉴스 통합 뷰 |
 | 주식 검색 | `/stocks` | 전체 종목 목록, 검색, 정렬 |
-| 종목 상세 | `/stocks/[ticker]` | OHLCV, 기술지표, 가격 차트 (30/60/90일) |
+| 종목 상세 | `/stocks/[ticker]` | OHLCV, 기술지표, 캔들스틱 차트 (30/60/90일), Gemini AI 종합 분석 |
 | 즐겨찾기 | `/favorites` | 즐겨찾기 종목 관리 |
 | 거래량 TOP10 | `/top-volume` | 한국/미국 거래량 상위 종목 |
 | 시그널 | `/signals` | 커스텀 조건식 시그널 목록 및 실행 |
@@ -122,18 +122,26 @@ GET  /api/v1/stocks?market=ALL&page=0&size=20  # 주식 목록/검색
 GET  /api/v1/stocks/{market}/{ticker}          # 주식 상세
 GET  /api/v1/stocks/{market}/{ticker}/history  # 가격 히스토리
 GET  /api/v1/stocks/top-volume?market=KR       # 거래량 TOP10
+POST /api/v1/stocks/{market}/{ticker}/analyze  # 종목 Gemini AI 종합 분석
 GET  /api/v1/favorites                         # 즐겨찾기 목록
 POST /api/v1/favorites                         # 즐겨찾기 추가
-DELETE /api/v1/favorites/{id}                  # 즐겨찾기 삭제
+DELETE /api/v1/favorites/{id}                  # 즐겨찾기 삭제 (id 기준)
+DELETE /api/v1/favorites/by-ticker             # 즐겨찾기 삭제 (ticker 기준)
+GET  /api/v1/favorites/check                   # 즐겨찾기 등록 여부 확인
 GET  /api/v1/signals                           # 시그널 목록
 POST /api/v1/signals                           # 시그널 생성
+GET  /api/v1/signals/{id}                      # 시그널 단건 조회
 PUT  /api/v1/signals/{id}                      # 시그널 수정
 DELETE /api/v1/signals/{id}                    # 시그널 삭제
 POST /api/v1/signals/{id}/run                  # 시그널 즉시 실행
+GET  /api/v1/signals/{id}/results              # 시그널 최근 실행 결과 조회
+GET  /api/v1/signals/{id}/analysis             # 시그널 Gemini 종합 분석 결과 조회
+POST /api/v1/signals/validate                  # 시그널 조건 JSON 유효성 검증
 POST /api/v1/signals/analyze                   # Gemini AI 전략 분석
 POST /api/v1/signals/parse-text                # 자연어 → 시그널 조건 변환
 GET  /api/v1/news?market=ALL                   # 뉴스 목록
-GET  /api/v1/system/collection-status              # 데이터 수집 상태 조회
+GET  /api/v1/system/collection-status          # 데이터 수집 상태 조회
+GET  /api/v1/system/cache-status               # 캐시(컬렉션별 데이터 건수) 상태 조회
 POST /api/v1/system/refresh-cache?type=KR|US|NEWS&timeframe=DAILY|WEEKLY|MONTHLY
 ```
 
