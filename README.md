@@ -224,3 +224,4 @@ docker start mongo-stockreport
 ```
 
 > 기여 방법 및 브랜치 전략은 [CONTRIBUTING.md](./CONTRIBUTING.md)를 참고하세요.
+> Claude Code 사용법 가이드는 [docs/CLAUDE_CODE_GUIDE.md](./docs/CLAUDE_CODE_GUIDE.md)를 참고하세요.
