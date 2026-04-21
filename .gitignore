@@ -33,6 +33,8 @@ frontend/tsconfig.tsbuildinfo
 # OMC (oh-my-claudecode)
 # ========================
 .omc/
+.claude/*
+!.claude/rules/
 
 # ========================
 # OS / Editor

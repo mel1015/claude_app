@@ -1,6 +1,8 @@
 # Claude Code 개발 필수 기능 가이드
 
-> Claude Code CLI의 개발에 직접 도움이 되는 핵심 기능 정리
+> Claude Code (CLI · 데스크탑 앱 · 웹앱 · IDE 확장)의 개발에 직접 도움이 되는 핵심 기능 정리
+>
+> **사용 가능한 플랫폼**: 터미널 CLI | 데스크탑 앱 (Mac/Windows) | 웹앱 (claude.ai/code) | IDE 확장 (VS Code, JetBrains)
 
 ---
 
@@ -18,6 +20,8 @@
 10. [키보드 단축키](#10-키보드-단축키)
 11. [이 프로젝트 설정 요약](#11-이-프로젝트-설정-요약)
 12. [oh-my-claudecode (OMC)](#12-oh-my-claudecode-omc--멀티-에이전트-오케스트레이션)
+13. [토큰 절약 전략](#13-토큰-절약-전략)
+14. [Advisor — 강력한 리뷰어 호출](#14-advisor--강력한-리뷰어-호출)
 
 ---
 
@@ -31,9 +35,23 @@
 | `/compact [focus]` | 대화 히스토리 압축 — 작업 목록은 유지됨 |
 | `/clear` | 대화 히스토리 초기화. 별칭: `/reset`, `/new` |
 
+#### /compact focus 상세
+
+`focus` 인자를 주면 압축 요약의 핵심 주제를 지정할 수 있다. focus 없이 실행하면 Claude가 전체 대화를 균등하게 요약하지만, focus를 지정하면 **해당 영역 정보는 최대한 보존하고 나머지는 축약**한다.
+
 ```bash
-/compact focus on backend changes   # 특정 영역 중심으로 압축
+/compact                              # 전체 대화 균등 압축
+/compact focus on backend changes     # 백엔드 변경 내용 위주로 보존
+/compact focus on signal feature      # 시그널 기능 관련 컨텍스트 우선 보존
+/compact focus on the bug we found    # 발견한 버그 맥락 중심으로 보존
 ```
+
+**언제 focus를 쓸까**:
+- 긴 대화 중 특정 기능만 계속 이어서 작업할 때
+- 다른 주제 논의가 많았지만 핵심 작업 컨텍스트는 잃고 싶지 않을 때
+- 압축 후 남은 컨텍스트에서 특정 결정·코드 변경 이력이 필요할 때
+
+> focus는 자연어로 자유롭게 작성 가능 — 명확할수록 보존 품질이 높아짐
 
 ### 세션 관리
 
@@ -48,12 +66,12 @@
 |--------|------|
 | `/model [id]` | 모델 전환. 좌/우 화살표로 effort 조정 |
 | `/cost` | 현재 세션 토큰 비용 조회 |
-| `/fast` | Fast 모드 토글 (같은 모델, 출력 속도만 향상) |
+| `/fast` | Fast 모드 토글 — **Opus 4.6 전용**, 더 빠른 출력 속도 (더 작은 모델로 다운그레이드 아님) |
 
 **현재 Claude 모델 패밀리**:
 | 모델 | ID | 용도 |
 |------|----|------|
-| Opus 4.6 | `claude-opus-4-6` | 복잡한 추론·아키텍처 설계 |
+| Opus 4.7 | `claude-opus-4-7` | 복잡한 추론·아키텍처 설계 |
 | Sonnet 4.6 | `claude-sonnet-4-6` | 균형 (기본 권장) |
 | Haiku 4.5 | `claude-haiku-4-5-20251001` | 단순 작업·빠른 응답 |
 
@@ -473,8 +491,7 @@ WebSearch
 
 | 서버 | 제공 기능 |
 |------|----------|
-| `ide` | `getDiagnostics` — TypeScript/Java 진단 |
-| `ide` | `executeCode` — 코드 실행 |
+| `ide` | `getDiagnostics` (TypeScript/Java 진단), `executeCode` (코드 실행) |
 
 ### 활성 스킬
 
@@ -486,6 +503,9 @@ WebSearch
 | notion | `/notion [제목] - [내용]` | Notion 페이지 생성 |
 | keybindings-help | `/keybindings-help` | 키 바인딩 커스터마이징 |
 | update-config | `/update-config` | settings.json 권한·훅 설정 |
+| fewer-permission-prompts | `/fewer-permission-prompts` | 자동으로 allowedTools 최적화 |
+| review | `/review` | 현재 브랜치 PR 코드 리뷰 |
+| security-review | `/security-review` | 변경 사항 보안 취약점 검사 |
 
 OMC 스킬은 섹션 12 참고.
 
@@ -522,26 +542,43 @@ OMC 스킬은 섹션 12 참고.
 | 에이전트 | 모델 | 용도 |
 |---------|------|------|
 | `explore` | haiku | 코드베이스 탐색, 파일 패턴 검색 |
-| `debugger` | sonnet | 버그 원인 분석, 스택트레이스 추적 |
 | `executor` | sonnet | 멀티파일 구현 작업 |
-| `code-reviewer` | opus | 코드 리뷰, SOLID 원칙 검사 |
-| `architect` | opus | 아키텍처 설계, 깊은 분석 |
-| `security-reviewer` | sonnet | OWASP 취약점, 보안 감사 |
-| `test-engineer` | sonnet | 테스트 전략, TDD |
+| `debugger` | sonnet | 버그 원인 분석, 스택트레이스 추적 |
+| `tracer` | sonnet | 근거 기반 원인 추적 (경쟁 가설 방식) |
 | `verifier` | sonnet | 작업 완료 검증, 증거 수집 |
-| `tracer` | sonnet | 근거 기반 원인 추적 |
-| `planner` | opus | 구현 계획 수립 |
+| `test-engineer` | sonnet | 테스트 전략, TDD, 통합/E2E 커버리지 |
+| `qa-tester` | sonnet | tmux 기반 CLI 인터랙티브 테스트 |
+| `security-reviewer` | sonnet | OWASP 취약점, 보안 감사 |
 | `git-master` | sonnet | 커밋, 리베이스, 히스토리 관리 |
+| `code-simplifier` | sonnet | 코드 단순화·가독성 개선 (기능 보존) |
+| `designer` | sonnet | UI/UX 디자이너-개발자 (프론트엔드) |
+| `writer` | haiku | README·API 문서·주석 작성 |
+| `scientist` | sonnet | 데이터 분석·리서치 실행 |
+| `document-specialist` | sonnet | 외부 문서·레퍼런스 조사 |
+| `code-reviewer` | opus | 코드 리뷰, SOLID 원칙 검사 |
+| `architect` | opus | 아키텍처 설계, 깊은 분석 (읽기 전용) |
+| `analyst` | opus | 요구사항 분석, 사전 계획 컨설팅 |
+| `critic` | opus | 작업 계획·코드 다각도 비평 |
+| `planner` | opus | 인터뷰 기반 전략 계획 수립 |
 
 ### 워크플로우 스킬
 
 ```bash
 /oh-my-claudecode:autopilot        # 아이디어 → 작동 코드 완전 자동 실행
 /oh-my-claudecode:ralph            # 작업 완료까지 자체 루프 반복
-/oh-my-claudecode:ultrawork        # 독립 태스크 병렬 고속 처리
+/oh-my-claudecode:ultrawork        # 독립 태스크 병렬 고속 처리 (키워드: "ulw")
 /oh-my-claudecode:plan             # 인터뷰 기반 전략 계획 수립
+/oh-my-claudecode:ralplan          # 요청 가기 전 합의 계획 — autopilot/ralph 전 권장
 /oh-my-claudecode:trace            # 버그/이슈 증거 기반 추적
-/oh-my-claudecode:ai-slop-cleaner  # AI 생성 코드 품질 정리
+/oh-my-claudecode:ai-slop-cleaner  # AI 생성 코드 품질 정리 (키워드: "deslop")
+/oh-my-claudecode:ask              # Claude / Codex / Gemini 어드바이저 라우팅
+/oh-my-claudecode:ccg              # Claude + Codex + Gemini 3모델 병렬 분석 후 합성
+/oh-my-claudecode:deep-interview   # 모호한 요건 → 소크라테스식 인터뷰 후 자율 실행
+/oh-my-claudecode:deep-dive        # trace → deep-interview 2단계 파이프라인
+/oh-my-claudecode:sciomc           # 병렬 과학자 에이전트로 종합 분석
+/oh-my-claudecode:ultraqa          # test → verify → fix 사이클 반복 (QA 자동화)
+/oh-my-claudecode:wiki             # 세션 간 지속되는 프로젝트 지식베이스 관리
+/oh-my-claudecode:verify           # 작업 완료 전 실제 동작 검증
 ```
 
 키워드 트리거 (명령어 없이 대화 중 자동 감지):
@@ -550,9 +587,41 @@ OMC 스킬은 섹션 12 참고.
 |--------|------|
 | `"autopilot"` | autopilot 모드 진입 |
 | `"ralph"` | ralph 루프 실행 |
+| `"ulw"` | ultrawork 병렬 실행 |
+| `"ralplan"` | 계획 합의 후 실행 |
+| `"ccg"` | Claude+Codex+Gemini 3모델 분석 |
+| `"deep interview"` | 소크라테스식 심층 인터뷰 |
 | `"ultrathink"` | 깊은 추론 모드 |
 | `"deepsearch"` | 코드베이스 심층 탐색 |
 | `"deslop"` / `"anti-slop"` | AI 코드 슬럽 정리 |
+| `"cancelomc"` | 현재 OMC 모드 취소 |
+
+### `/ask` 어드바이저 라우팅 (신규)
+
+실행 전 설계·조사가 필요할 때 단일 AI 대신 여러 모델에 동시에 물어보는 기능.
+
+```bash
+/oh-my-claudecode:ask              # 대화형 어드바이저 모드
+omc ask codex "리팩토링 전략은?"   # Codex에게 직접 질문
+omc ask gemini "이 API 패턴 맞나?" # Gemini에게 직접 질문
+```
+
+- 결과는 artifact로 캡처 → Claude가 종합 후 실행 계획 제안
+- 코드 구현 전 설계 검토, 외부 API 조사, 기술 선택에 활용
+
+### OMC 지식 도구 (Knowledge Tools)
+
+세션을 넘어 지식을 축적하는 도구들 (MCP 통해 사용 가능):
+
+| 도구 | 용도 |
+|------|------|
+| `wiki_add` / `wiki_query` | 프로젝트 위키 작성·검색 |
+| `notepad_write_working` | 현재 작업 메모 (임시) |
+| `notepad_write_priority` | 중요 메모 (영구 보존) |
+| `notepad_read` | 메모 전체 읽기 |
+| `project_memory_add_note` | 프로젝트 장기 메모리 추가 |
+| `project_memory_read` | 프로젝트 메모리 조회 |
+| `shared_memory_write` | 에이전트 간 공유 메모리 |
 
 ### LSP 코드 인텔리전스 도구
 
@@ -584,3 +653,166 @@ MCP를 통해 IDE 수준의 코드 분석 가능:
 ```
 
 > OMC 문제 발생 시: `/oh-my-claudecode:omc-doctor`
+
+---
+
+## 13. 토큰 절약 전략
+
+Claude Code는 토큰 소모가 누적되므로 장기 작업일수록 비용 관리가 중요하다.
+
+### 컨텍스트 관리
+
+| 방법 | 효과 |
+|------|------|
+| `/compact` | 대화 히스토리 압축 (작업 목록 유지) — 가장 효과적 |
+| `/context` | 현재 컨텍스트 사용률 시각화 → 80% 넘으면 compact 권장 |
+| `/clear` | 컨텍스트 완전 초기화 (새 작업 시작 시) |
+| `/cost` | 현재 세션 누적 토큰·비용 확인 |
+
+**compact 타이밍**: 한 기능 완료 시마다 실행하면 누적 증가를 막을 수 있음.
+
+```bash
+/compact focus on signal feature   # 특정 영역 중심으로 압축 (나머지 날림)
+```
+
+### 모델 선택 전략
+
+비용 차이가 크므로 작업 복잡도에 맞게 선택:
+
+| 모델 | 비용 | 언제 쓸까 |
+|------|------|----------|
+| Haiku 4.5 | 최저 | 단순 검색·파일 읽기·포맷팅 |
+| Sonnet 4.6 | 중간 | 일반 구현·리뷰 (기본 권장) |
+| Opus 4.7 | 최고 | 아키텍처 설계·복잡한 디버깅만 |
+
+```bash
+/model   # 모델 전환 (← → 화살표로 effort 조정)
+```
+
+**OMC 에이전트는 모델을 자동 분배**: `explore` → haiku, `executor` → sonnet, `architect` → opus.  
+직접 에이전트 호출 시 `model=haiku`로 명시하면 추가 절약 가능.
+
+### 검색 효율화
+
+파일 전체를 읽는 대신 정확히 필요한 부분만 조회:
+
+```bash
+# 비효율 (파일 전체 읽기)
+> StockService.java 읽어줘
+
+# 효율 (패턴 검색)
+> StockService에서 getTopVolume 메서드 찾아줘   → Grep 사용
+> backend/src 아래 *Service.java 파일 목록       → Glob 사용
+> lsp_find_references로 특정 메서드 참조 위치 조회
+```
+
+### 서브에이전트 활용
+
+긴 조사 작업은 서브에이전트에 위임하면 메인 컨텍스트 오염 없이 결과만 반환받음:
+
+```
+"explore 에이전트로 SignalEvaluator 관련 파일 모두 찾아줘"
+→ 탐색 결과만 메인 컨텍스트에 요약 반환
+```
+
+### 세션 분리 원칙
+
+| 상황 | 권장 행동 |
+|------|----------|
+| 완전히 다른 기능 작업 시 | `/clear` 후 새 세션 |
+| 같은 기능인데 컨텍스트 80%+ | `/compact` |
+| 장시간 디버깅 후 방향 전환 | `/compact focus on <새 주제>` |
+| 비용 과다 경고 | `/cost` 확인 → Haiku 전환 고려 |
+
+### Extended Thinking 주의
+
+`/model` → effort `high`는 입력 토큰의 수배를 추가 소모:
+- 복잡한 알고리즘·아키텍처 결정에만 사용
+- 일반 구현 작업에는 `low` 또는 기본 유지
+- 작업 전 `/cost`로 현재 소모량 확인 권장
+
+---
+
+## 14. Advisor — 강력한 리뷰어 호출
+
+`advisor()`는 현재 대화 전체(작업 내용·도구 호출 결과·추론 과정)를 더 강력한 리뷰어 모델에게 전달해 검토 받는 도구.
+
+### 특징
+
+- **파라미터 없음** — 호출만 하면 전체 대화 컨텍스트가 자동 전달됨
+- 리뷰어는 현재 Claude가 본 것을 동일하게 봄 (파일, 실행 결과, 오류 포함)
+- 응답은 조언으로 돌아오며, 실제 파일 수정은 하지 않음
+
+### 언제 호출해야 하는가
+
+| 시점 | 이유 |
+|------|------|
+| **실질적인 작업 전** | 코드 작성·수정·커밋 전에 방향을 먼저 검증 |
+| **작업 완료 직전** | 완료 선언 전 — 결과물을 파일에 저장한 후 호출 |
+| **막혔을 때** | 같은 오류가 반복되거나 접근법이 수렴하지 않을 때 |
+| **방향 전환 고려 시** | 새로운 접근법으로 바꾸기 전 타당성 검토 |
+
+> 작업 완료 후 advisor 호출 전에 반드시 파일 저장·커밋 등으로 결과물을 먼저 보존할 것. 호출 중 세션이 종료돼도 결과는 남아 있어야 함.
+
+### 조언을 대하는 방법
+
+- 조언에는 충분한 가중치를 부여할 것
+- 직접 확인한 증거(파일 내용, 실행 결과)가 조언과 충돌하면 무시하지 말고 충돌 사실을 명시한 후 재호출할 것
+- 자체 테스트 통과가 조언이 틀렸다는 증거가 되지는 않음 — 테스트가 무엇을 검사하지 않는지 확인
+
+### 호출 빈도 가이드
+
+| 작업 규모 | 권장 시점 |
+|----------|----------|
+| 짧은 단일 작업 | 도구 결과로 다음 행동이 명확하면 생략 가능 |
+| 여러 단계 작업 | 접근법 확정 전 1회 + 완료 직전 1회 |
+| 복잡한 리팩터링 | 각 주요 결정마다 호출 |
+
+### 주의사항
+
+- 장시간 작업이므로 호출 중 다른 작업과 병렬 처리하지 말 것
+- "advisor가 제안한 대로 구현해줘" 같이 이해를 advisor에게 위임하지 말 것 — 파일 경로·줄 번호·변경 내용을 직접 특정한 후 호출할 것
+
+### 사용법 예시
+
+**1. 구현 전 방향 검증**
+
+```
+사용자: SignalEvaluator에 RSI 다이버전스 로직 추가해줘
+
+Claude: (관련 파일 탐색 후)
+→ advisor() 호출 — "이 구조에서 RSI 다이버전스를 추가할 때
+  SignalEvaluator를 직접 수정하는 게 맞는가,
+  아니면 별도 전략 클래스로 분리해야 하는가?"
+→ 조언 수신 후 구현 시작
+```
+
+**2. 작업 완료 직전 검증**
+
+```
+Claude: (파일 수정 완료 후)
+→ 변경된 파일 저장 확인
+→ advisor() 호출 — "변경 내용이 기존 SignalScheduler 흐름과
+  충돌하지 않는지, 누락된 엣지케이스는 없는지 검토 요청"
+→ 조언에 문제 없으면 완료 선언
+```
+
+**3. 반복 오류 시**
+
+```
+Claude: (같은 NullPointerException이 3번째 재현)
+→ advisor() 호출 — "스택트레이스 X, 시도한 수정 Y·Z 모두
+  실패. 어떤 가정이 잘못됐는지 외부 시각으로 검토 요청"
+```
+
+**4. 조언과 증거 충돌 시**
+
+```
+advisor: "StockService.getLatestStock은 캐시를 사용하므로
+         직접 DB 조회와 결과가 다를 수 있다"
+
+Claude: (실제 코드 확인 → 캐시 없이 DB 직접 조회 중)
+→ advisor() 재호출 — "getLatestStock:32 확인 결과 캐시 없이
+  findFirst…OrderByTradeDateDesc 직접 호출. 이 경우에도
+  원래 우려가 적용되는가?"
+```
