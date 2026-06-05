@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -165,11 +166,20 @@ public class KrStockDataService {
             if (collectedAfterClose) return false;
         }
 
-        // 히스토리 여부에 따라 fetch count 결정 (처음 수집이면 full, 이후엔 최신 5개면 충분)
-        boolean hasHistory = stockDailyCacheRepository
+        // fetch count 결정: 처음이면 full, 이후엔 마지막 거래일~오늘 공백을 덮는 만큼 동적 계산.
+        // (오래 쉬었다 재가동해도 마지막 수집일 이후 빠진 구간을 한 번에 메우기 위함 — DAILY 한정)
+        StockDailyCache latestRow = stockDailyCacheRepository
                 .findFirstByTickerAndMarketAndTimeframeOrderByTradeDateDesc(info.code, market, timeframe)
-                .isPresent();
-        int fetchCount = hasHistory ? 5 : count;
+                .orElse(null);
+        int fetchCount;
+        if (latestRow == null) {
+            fetchCount = count;                                  // 신규 종목: full
+        } else if (timeframe == Timeframe.DAILY) {
+            long calDays = ChronoUnit.DAYS.between(latestRow.getTradeDate(), today);
+            fetchCount = (int) Math.min(count, Math.max(5, calDays + 5)); // 여유 5, 최소 5, 최대 count
+        } else {
+            fetchCount = 5;                                      // WEEKLY/MONTHLY: 일↔봉 단위 불일치 방지 위해 기존 동작 유지
+        }
 
         List<OhlcvRow> history = fetchOhlcvHistory(info.code, navTimeframe, fetchCount);
         if (history.isEmpty()) return true;
