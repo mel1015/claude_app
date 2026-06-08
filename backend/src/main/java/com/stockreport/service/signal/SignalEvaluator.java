@@ -33,9 +33,15 @@ public class SignalEvaluator {
             String field = node.path("field").stringValue("");
             String operator = node.path("operator").stringValue("");
             String compareKey = node.has("compareField") ? node.path("compareField").stringValue("") : null;
-            double val = current.getOrDefault(field, 0.0);
+
+            // 지표 미계산(null) 시 0으로 폴백하면 `close > ma60`(→ close > 0)이나
+            // `ma5 crossover ma20`(→ 0 <= 0)이 거짓으로 성립한다. 값이 없으면 조건 불성립으로 처리.
+            if (!current.containsKey(field)) return false;
+            if (compareKey != null && !current.containsKey(compareKey)) return false;
+
+            double val = current.get(field);
             double cmp = compareKey != null
-                    ? current.getOrDefault(compareKey, 0.0)
+                    ? current.get(compareKey)
                     : node.path("value").asDouble();
             return switch (operator) {
                 case ">"  -> val > cmp;
@@ -45,18 +51,20 @@ public class SignalEvaluator {
                 case "==" -> Math.abs(val - cmp) < 0.0001;
                 case "!=" -> Math.abs(val - cmp) >= 0.0001;
                 case "crossover" -> {
-                    if (prev == null) yield false;
-                    double prevVal = prev.getOrDefault(field, 0.0);
+                    if (prev == null || !prev.containsKey(field)) yield false;
+                    if (compareKey != null && !prev.containsKey(compareKey)) yield false;
+                    double prevVal = prev.get(field);
                     double prevCmp = compareKey != null
-                            ? prev.getOrDefault(compareKey, 0.0)
+                            ? prev.get(compareKey)
                             : node.path("value").asDouble();
                     yield prevVal <= prevCmp && val > cmp;
                 }
                 case "crossunder" -> {
-                    if (prev == null) yield false;
-                    double prevVal = prev.getOrDefault(field, 0.0);
+                    if (prev == null || !prev.containsKey(field)) yield false;
+                    if (compareKey != null && !prev.containsKey(compareKey)) yield false;
+                    double prevVal = prev.get(field);
                     double prevCmp = compareKey != null
-                            ? prev.getOrDefault(compareKey, 0.0)
+                            ? prev.get(compareKey)
                             : node.path("value").asDouble();
                     yield prevVal >= prevCmp && val < cmp;
                 }
