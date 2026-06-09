@@ -129,14 +129,20 @@ public class SignalService {
      * AI 분석·Slack 알림을 보류하고, 재발 시 원인 파악용 진단 정보(매칭 샘플의 지표 입력)를 남긴다.
      */
     private boolean isAbnormallyManyMatches(Signal signal, List<StockDto> results, int totalEvaluated) {
-        double ratio = totalEvaluated > 0 ? (double) results.size() / totalEvaluated : 0.0;
-        if (results.size() < 50 || ratio <= 0.2) return false;
+        if (!isMatchRatioAbnormal(results.size(), totalEvaluated)) return false;
+        double ratio = (double) results.size() / totalEvaluated;
         log.warn("[시그널] '{}' 매칭 {}/{}건({}%) — 비정상 대량 매칭, 데이터 이상 의심으로 AI분석·알림 보류",
                 signal.getName(), results.size(), totalEvaluated, String.format("%.1f", ratio * 100));
         results.stream().limit(5).forEach(s ->
                 log.warn("[시그널 진단] {} {} ma5={} ma20={} ma60={} close={} changeRate={}",
                         s.getTicker(), s.getName(), s.getMa5(), s.getMa20(), s.getMa60(), s.getClosePrice(), s.getChangeRate()));
         return true;
+    }
+
+    /** 매칭이 비정상 대량인지 판정: 절대 건수 50건 이상이면서 평가 대상의 20%를 초과. */
+    static boolean isMatchRatioAbnormal(int matchedCount, int totalEvaluated) {
+        if (matchedCount < 50 || totalEvaluated <= 0) return false;
+        return (double) matchedCount / totalEvaluated > 0.2;
     }
 
     @Transactional(readOnly = true)
