@@ -90,13 +90,14 @@ public class SignalService {
     public List<StockDto> runSignal(String id) {
         Signal signal = signalRepository.findById(id)
                 .orElseThrow(() -> new StockNotFoundException("시그널을 찾을 수 없습니다: " + id));
-        List<StockDto> results = executeSignal(signal);
+        SignalRunResult run = executeSignal(signal);
+        List<StockDto> results = run.matched();
         signal.setLastRunAt(LocalDateTime.now());
         try { signal.setLastResult(objectMapper.writeValueAsString(results)); }
         catch (JacksonException e) { log.warn("Failed to serialize results"); }
 
         String analysisJson = null;
-        if (!results.isEmpty()) {
+        if (!results.isEmpty() && !isAbnormallyManyMatches(signal, results, run.totalEvaluated())) {
             Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
 
             // AI 분석 — Gemini 실패 시 null → 기본 알림만 발송
@@ -119,6 +120,23 @@ public class SignalService {
 
         signalRepository.save(signal);
         return results;
+    }
+
+    /**
+     * 비정상 대량 매칭 감지(false-alert hygiene — 근본 원인 수정이 아닌 오탐 알림 방지).
+     * crossover 류 조건은 현실적으로 전체 종목의 극소수(&lt;5%)에서만 발생한다. 평가 대상의 20%를
+     * 초과하고 절대 건수도 50건 이상이면 first-boot 지표 미정착 등 데이터 이상으로 간주해
+     * AI 분석·Slack 알림을 보류하고, 재발 시 원인 파악용 진단 정보(매칭 샘플의 지표 입력)를 남긴다.
+     */
+    private boolean isAbnormallyManyMatches(Signal signal, List<StockDto> results, int totalEvaluated) {
+        double ratio = totalEvaluated > 0 ? (double) results.size() / totalEvaluated : 0.0;
+        if (results.size() < 50 || ratio <= 0.2) return false;
+        log.warn("[시그널] '{}' 매칭 {}/{}건({}%) — 비정상 대량 매칭, 데이터 이상 의심으로 AI분석·알림 보류",
+                signal.getName(), results.size(), totalEvaluated, String.format("%.1f", ratio * 100));
+        results.stream().limit(5).forEach(s ->
+                log.warn("[시그널 진단] {} {} ma5={} ma20={} ma60={} close={} changeRate={}",
+                        s.getTicker(), s.getName(), s.getMa5(), s.getMa20(), s.getMa60(), s.getClosePrice(), s.getChangeRate()));
+        return true;
     }
 
     @Transactional(readOnly = true)
@@ -161,7 +179,10 @@ public class SignalService {
         }
     }
 
-    private List<StockDto> executeSignal(Signal signal) {
+    /** 시그널 실행 결과 — 매칭 종목과 평가 대상 총수(비정상 대량 매칭 감지용). */
+    private record SignalRunResult(List<StockDto> matched, int totalEvaluated) {}
+
+    private SignalRunResult executeSignal(Signal signal) {
         try {
             JsonNode conditions = objectMapper.readTree(signal.getConditions());
             List<Market> markets = new ArrayList<>();
@@ -171,6 +192,7 @@ public class SignalService {
             else if (mf.equals("US")) markets.addAll(List.of(Market.NYSE, Market.NASDAQ));
 
             List<StockDto> matched = new ArrayList<>();
+            int totalEvaluated = 0;
             Timeframe timeframe = signal.getTimeframe() != null ? signal.getTimeframe() : Timeframe.DAILY;
             for (Market market : markets) {
                 LocalDate latestDate = stockDailyCacheRepository
@@ -189,16 +211,17 @@ public class SignalService {
 
                 List<StockDailyCache> stocks = stockDailyCacheRepository
                         .findByMarketAndTradeDateAndTimeframeOrderByVolumeDesc(market, latestDate, timeframe, PageRequest.of(0, Integer.MAX_VALUE));
+                totalEvaluated += stocks.size();
                 for (StockDailyCache stock : stocks) {
                     Map<String, Double> currentMap = signalEvaluator.stockToMap(stock);
                     Map<String, Double> prevMap = prevStocksMap.get(stock.getTicker());
                     if (signalEvaluator.evaluate(conditions, currentMap, prevMap)) matched.add(stockService.toDto(stock));
                 }
             }
-            return matched;
+            return new SignalRunResult(matched, totalEvaluated);
         } catch (Exception e) {
             log.error("Failed to execute signal {}: {}", signal.getId(), e.getMessage(), e);
-            return List.of();
+            return new SignalRunResult(List.of(), 0);
         }
     }
 
