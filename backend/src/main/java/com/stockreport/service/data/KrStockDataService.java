@@ -176,7 +176,14 @@ public class KrStockDataService {
             fetchCount = count;                                  // 신규 종목: full
         } else if (timeframe == Timeframe.DAILY) {
             long calDays = ChronoUnit.DAYS.between(latestRow.getTradeDate(), today);
-            fetchCount = (int) Math.min(count, Math.max(5, calDays + 5)); // 여유 5, 최소 5, 최대 count
+            long needed = Math.max(5, calDays + 5);
+            fetchCount = (int) Math.min(count, needed);          // 여유 5, 최소 5, 최대 count
+            if (needed > count) {
+                // 갭이 fetchCount 상한(count 거래일)을 초과 — 한 번에 못 메움. prev 봉이 비연속이 되어
+                // crossover·changeRate가 왜곡될 수 있으므로 경고. 이후 수집에서 점진 복구됨.
+                log.warn("[수집] {} 마지막 거래일 이후 {}일 갭 — fetchCount {}로 제한, 일부 구간은 다음 수집에서 복구",
+                        info.code, calDays, count);
+            }
         } else {
             fetchCount = 5;                                      // WEEKLY/MONTHLY: 일↔봉 단위 불일치 방지 위해 기존 동작 유지
         }
